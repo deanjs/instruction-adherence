@@ -591,13 +591,14 @@ def run_observe(args):
     import torch
     from transformers import AutoModelForCausalLM, AutoTokenizer
 
+    model_id = args.model or OBSERVE_MODEL     # --model 미지정이면 exp1과 동일한 3B
     if not torch.cuda.is_available():
-        print("경고: CUDA 없음. attention 관측은 GPU 런타임이 필요하다.", file=sys.stderr)
-    if "int8" in args.model.lower() or "4bit" in args.model.lower():
+        sys.exit("CUDA 없음 — Colab을 GPU 런타임(T4)으로 바꿔라. "
+                 "attention 관측은 GPU 필수(fp16, CPU 불가).")
+    if "int8" in model_id.lower() or "4bit" in model_id.lower():
         sys.exit("양자화 모델 금지 — activation 노이즈로 관측이 흔들린다(CLAUDE.md).")
 
     register_attention()
-    model_id = args.model
     seeds = [args.base_seed + k for k in range(args.n_seeds)]
     done = load_done(args.out)
     pending = [(cr, s) for cr in args.levels for s in seeds
