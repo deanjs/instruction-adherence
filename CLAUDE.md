@@ -51,11 +51,13 @@ context에 누적된 이전 코드를 규칙보다 우선해서 참조하기 때
   - 하네스: `src/stage2_attention.py`(`--validate`/`--observe`/`--content`/`--content2x2`), `notebooks/stage2_colab.ipynb`
   - 커널 검증 PASS(`--validate`, 1.5B fp32): eager 대조 2632쌍, 최대 절대오차 5.96e-07
   - 관측 100세션(`results/stage2_niar.jsonl`). 2×2로 "위반 상태" 효과 분리·개입 후보층 선정
-- [ ] **Step 3** — attention/KV 개입 (P1a·P2), 주 가설 H3. 계획서 3.5/3.6
-  - 하네스 구현: `src/stage3_intervention.py`(`--validate`/`--run-a`/`--run-b`/`--summary-only`), `notebooks/stage3_colab.ipynb`
-  - P1a=KV group(4) K/V 치환, P2=query head(28) α 배율, 준수 선호 점수=공통 고정 후보 teacher forcing
-  - **Colab에서 `--validate` PASS 확인 후** 실측(`--run-a`→`--run-b`) 진행 — 그 전엔 미완료
-  - P1b/P3(탐색)는 v1 미구현(주 가설 H3=P1a에 집중)
+- [ ] **Step 3** — attention/KV 개입 (P1a·P2), 주 가설 H3. 계획서 3.5/3.6 (`stage3_intervention_v2`)
+  - 하네스: `src/stage3_intervention.py`(`--validate`/`--run-a`/`--run-b`/`--summary-only`), `notebooks/stage3_colab.ipynb`
+  - **주 조건 = L25 단독 × 전 KV group** 코드 K/V 이식(2단계 재현 층). 전 층 각각 같은 규모로 돌려 L25 아닌 층이 규모-일치 귀무분포. `p1a_full`=회복 상한
+  - P2=query head α×λ 곡선(단조성)+층 국소. 준수 선호 점수=작업일치 고정 후보(formatValue/format_value) teacher forcing
+  - 음성 대조 전부 L25 규모(no-op·지침·무관 코드·코드 외). cluster bootstrap(이름쌍·seed) CI·층 귀무·Recovery Ratio
+  - **Colab에서 `--validate` PASS → 10쌍 파일럿 → 본실험**(`--run-a`→`--run-b`) 순. 그 전엔 미완료
+  - P1b/P3(탐색)는 미구현(주 가설 H3=P1a에 집중)
 - [ ] 이후 계획서 7장 일정 참조
 
 ## 구조

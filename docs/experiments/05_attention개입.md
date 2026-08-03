@@ -65,47 +65,64 @@ Qwen은 GQA(query head 28, KV head 4, 7:1 공유).
 
 ---
 
-## 실행
+## 실행 (`stage3_intervention_v2`)
+
+> v1 초안 대비 반영: **① 작업↔후보 의미 일치, ② L25 국소 주 조건, ③ 규모-일치 대조·귀무,
+> ④ cluster bootstrap 통계, ⑤ 파일럿 경로.** design_version을 v2로 올려 v1과 안 섞는다.
 
 - 하네스: [`src/stage3_intervention.py`](../../src/stage3_intervention.py)
-  - `--validate` — **개입 하네스 불변식 자기검증. 실측의 게이트.** PASS 전엔 실측 미완료로 본다.
-    V1 개입 없는 경로=표준 SDPA(비트 근사)  ·  V2 no-op(donor=self)→준수 선호 점수 불변
-    V3 지침 patch→Δ≈0  ·  V4 **GQA 단위**(n_q=28·n_kv=4, P1a=KV group·P2=query head)
-    V5 P2 질량 보존(α 행합=1)  ·  V6 λ=1 항등. 크기 무관 → 1.5B fp32.
-  - `--run-a` — A분할(50쌍) 기저 gap(준수 baseline − 손상 baseline). Recovery Ratio 분모.
-  - `--run-b` — B분할(50쌍) 개입 실행. `--p1a`(주) `--p2`(보조) `--controls`(음성 대조).
-    `--sweep`이면 층×단위 국소화(전 층 × KV group 4 / 전 층 × query head)까지.
-  - `--summary-only` — Recovery Ratio·무작위 대조 대비 상위 꼬리 검정.
-- Colab 진입점: [`notebooks/stage3_colab.ipynb`](../../notebooks/stage3_colab.ipynb) (검증 → A → B → 집계).
-- 결과: `results/stage3_intervention.jsonl` — 세션 단위 append,
-  `(split, config_key, pair_idx, seed, model)`로 재개.
+  - `--validate` — **불변식 자기검증. 실측의 게이트.** V1 표준경로=SDPA · V2 no-op 불변 ·
+    V3 지침 patch≈0 · V4 GQA 단위(P1a=KV group·P2=query head) · V5 P2 질량 보존 ·
+    V6 λ=1 항등 · V7 L25 이식이 점수를 움직이는지(sanity). 크기 무관 → 1.5B fp32.
+  - `--run-a` — A분할(50쌍) 기저 gap. `--max-pairs`로 파일럿.
+  - `--run-b` — B분할(50쌍) 개입. `--p1a`(주) `--p2`(보조). 대조군은 P1a에 자동 포함.
+    `--sweep`이면 group별·후보 층 query head 28개 순회까지. `--main-layer`/`--aux-layers` 재정의.
+  - `--summary-only` — cluster bootstrap CI·층 귀무 검정·Recovery Ratio·λ 단조 추세.
+- Colab: [`notebooks/stage3_colab.ipynb`](../../notebooks/stage3_colab.ipynb)
+  (검증 → A → **10쌍 파일럿** → 본실험 B → 집계).
+- 결과: `results/stage3_intervention.jsonl` — append, `(split, config_key, pair_idx, seed, model)` 재개.
+
+### 주 조건과 귀무분포 (리뷰 반영)
+
+- **주 개입 = `p1a_L25_allG`** — 2단계 split-half로 재현된 **L25 단독 × 전 KV group**에
+  코드 K/V를 준수 값으로 이식. "L25가 준수 결정의 원인인가"를 직접 검정.
+- **규모-일치 귀무분포** — 전 층 각각을 **같은 규모(1층×전 group)**로 돌린
+  `p1a_L{li}_allG` 중 **L25 아닌 층들의 효과 분포**. 무작위 층 대조를 결정적·포괄적으로
+  대체(모든 층이 같은 규모라 공정). 주 판정 = L25가 이 분포의 상위 꼬리인가(층 귀무 p).
+- **회복 상한** = `p1a_full`(전 층×전 group). Recovery Ratio 분자 상한.
+- **음성 대조(전부 L25 규모, Δ≈0 기대)** — `ctl_noop_L25`(donor=self, 정확히 0),
+  `ctl_instr_L25`(지침 구간, 비트 동일), `ctl_irrel_L25`(코드 블록 내 filler=무관 코드,
+  동일 길이), `ctl_noncode_L25`(코드 외 구간). 위치만 바꿔 특이성 확인.
+- **P2** = 지침 α×λ. 전 층×전 head λ 곡선(**단조 추세 Spearman**) + 전 층 국소(층별 귀무).
+
+### 통계 (2단계 계열)
+
+- 클러스터 = **(이름쌍, seed)**. config별 클러스터 평균의 부트스트랩으로 준수 선호 점수
+  변화량 **95% CI**. Recovery Ratio는 분자(B config)·분모(A gap)를 **독립 재표본**해 비율 CI.
+- 층 귀무 p = L25 효과가 나머지 층 효과 분포에서 차지하는 상위 꼬리 위치.
+- P2 λ 단조성 = λ vs 평균 Δ의 Spearman ρ.
 
 ### 하네스가 절대 규칙을 강제하는 방식
 
-- **규칙 1(점수 무관 선별):** context pair의 A/B 분할은 고정 seed(`SPLIT_SEED`) 셔플만 —
-  코드 어디서도 준수 선호 점수를 선별에 참조하지 않는다. Recovery Ratio 분자(B)·분모(A)를
-  분리 표본으로 두어 상관·평균 회귀 오독을 막는다.
-- **규칙 2(공통 고정 후보):** 결정 지점 후보는 `choose_decision_pair`가 고른 **한 쌍**을
-  모든 조건·모든 개입에서 동일 채점. 실제 생성 이름은 이 스크립트에서 쓰지 않는다(측정 분리).
-- **규칙 3(토큰 정확 일치):** `prepare_session`이 준수/위반 두 프롬프트의 토큰열을 대조해
-  **코드 구간 밖에서 한 토큰이라도 다르면 폐기**(`align_out_of_code`). 정렬돼야 코드 구간
-  K/V 치환의 위치가 정의된다.
-- **규칙 4(GQA 단위):** P1a는 **pre-repeat** `key/value (b, kvh, kv, d)`의 `kvh` 축(=KV group)을
-  `index_copy_`로 치환 → group 내 7개 query head를 함께 건드리는 사실이 자명하게 드러난다.
-  P2는 **post-softmax** α `(b, H, q, kv)`의 `H` 축(=query head)에 배율. `--validate` V4가
-  `n_kv_heads=4`·`n_q_heads=28`을 assert.
-- **규칙 5(사전 등록 보존):** 출력은 새 파일 `stage3_intervention.jsonl`. 기존 `results/`는 불변.
+- **규칙 1:** A/B 분할은 고정 seed 셔플만 — 준수 선호 점수를 선별에 절대 참조 안 함.
+  Recovery Ratio 분자(B)·분모(A)는 분리 표본.
+- **규칙 2:** 결정 후보는 **작업과 의미가 맞는 고정 쌍** `formatValue`/`format_value`(camel=준수).
+  모든 조건·개입에서 동일 채점. 실제 생성 이름은 이 스크립트에서 안 씀(측정 분리).
+- **규칙 3:** `prepare_session`이 준수/위반 프롬프트를 대조, **코드 구간 밖 상이 시 폐기**.
+  후보 토큰이 조건에 의존하면(`cand_context_dependent`) 폐기.
+- **규칙 4:** P1a는 pre-repeat `key/value`의 `kvh` 축(=KV group)을 `index_copy_` 치환 —
+  group 내 공유 query head를 함께 건드림이 자명. P2는 post-softmax α의 `H` 축(=query head).
+  V4가 `n_q % n_kv == 0` 정합과 head 수를 보고(1.5B은 12×2, 개입 3B은 실제 head 수 사용).
+- **규칙 5:** 출력은 새 파일 `stage3_intervention.jsonl`. 기존 `results/`는 불변.
 
-### 개입 메커니즘 메모 (구현 판단)
+### 개입 메커니즘 메모
 
-- 조건 간 다른 건 코드 구간 K/V뿐이고 지침 K/V는 비트 동일(§왜 지침 교체가 무의미한가).
-  그래서 **prefix KV 캐시는 위반본 하나만** 만들고(Colab 제약: 캐시 1회·재사용), 후보 채점
-  forward에서 코드 구간 열을 준수본 donor로 덮어써 P1a를 실현한다 — 모든 teacher-forcing
-  step에 자동 동일 적용. donor는 준수 prefix 캐시의 코드 구간 열 슬라이스.
-- P2는 채점 forward에서만 지침 열 α에 λ를 곱하고(질량 보존 시 재정규화), prefill은 표준
-  경로로 둔다(개입 없는 경로 비트 동일 = V1).
-- **P1b/P3(탐색)는 이 v1 미구현** — 주 가설은 H3(P1a)뿐이라 P1a·P2와 음성 대조·판정까지
-  먼저 닫는다. 기여분 분해(`c_C`/`c_I`) 이식은 후속 버전에서 별 파일로 추가(규칙 5).
+- 지침 K/V는 두 조건 비트 동일 → **prefix KV 캐시는 위반본·준수본 각 1회**만 만들고(캐시
+  재사용), 후보 채점 forward에서 대상 위치 열을 준수본 donor로 덮어써 P1a 실현(모든
+  teacher-forcing step 자동 적용). donor는 준수 캐시의 해당 위치 슬라이스(임의 위치 지원 →
+  대조군도 같은 경로).
+- P2는 채점 forward에서만 지침 α에 λ(질량 보존 시 재정규화), prefill은 표준 경로(V1 비트 동일).
+- **P1b/P3(탐색)는 v1/v2 미구현** — 주 가설 H3(P1a)에 집중. 기여분 분해 이식은 후속 별 파일.
 
 ---
 

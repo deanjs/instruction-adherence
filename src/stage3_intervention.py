@@ -70,7 +70,7 @@ from exp1_main import system_prompt, INSTRUCTION            # noqa: E402
 from exp1_pilot import INSTRUCTION_RULE, PREFIX_FUNCS        # noqa: E402
 from stage2_attention import _char_span_to_tokens, _repeat_kv  # noqa: E402  (정본 재사용)
 
-DESIGN_VERSION = "stage3_intervention_v1"
+DESIGN_VERSION = "stage3_intervention_v2"   # v1(초안)과 안 섞이게 — L25 조건·규모일치 대조 추가
 ATTN_NAME = "stage3_intervene"        # AttentionInterface 등록 이름
 
 RESULTS_DIR = os.path.join(
@@ -86,8 +86,19 @@ LAMBDAS = [0.5, 1.0, 2.0, 4.0, 8.0]   # P2 배율 (계획서 3.6)
 SPLIT_SEED = 20240803                  # A/B 분할 고정 seed (점수 무관 — 규칙 1)
 N_SPLIT = 50                           # A·B 각 50쌍 (계획서 3.6)
 
-# 새로 명명할 함수의 작업 지시(고정). 조건 간 동일.
+# 결정 지점 후보(조건 공통 고정 문자열, 규칙 2) — **작업 지시와 의미가 일치해야 한다.**
+#   작업="값을 표시용으로 포맷" ↔ 후보 이름 formatValue/format_value. (사전순 임의 선택 폐기)
+#   camel=준수(Python에 camelCase 요구 = 비관용 방향), snake=위반(관용). exp1/2단계 매핑과 동일.
+#   채점은 (1/|Y|) 정규화라 두 후보의 토큰 수 일치는 불필요(토큰 정확 일치는 context pair 규칙).
 DECISION_SPEC = "formats a value for display"
+DECISION_PAIR = {"camel": "formatValue", "snake": "format_value"}
+
+# 2단계 split-half로 재현된 개입 후보 층(docs/experiments/04b). **L25 우선(주 개입).**
+#   나머지는 보조 분석. --main-layer / --aux-layers로 재정의 가능.
+MAIN_LAYER = 25
+AUX_LAYERS = [7, 31, 27, 15, 20, 34, 33]
+
+SINK = 4                               # attention sink 앞 토큰 — 대조 위치에서 제외(2단계와 동일)
 
 
 # ─────────────────────────────────────────────────────────────
@@ -270,6 +281,18 @@ def _make_cache(kv_list):
         return c
 
 
+def _slice_kv(legacy, pos_tensor):
+    """legacy 캐시 각 층 K/V에서 pos 열만 뽑아 donor 형태 {layer:(k_seg,v_seg)}로.
+
+    pos_tensor 순서 = 나중에 forward에서 index_copy_로 되쓸 위치 순서와 반드시 동일해야 한다.
+    """
+    d = {}
+    for li, (k, v) in enumerate(legacy):
+        p = pos_tensor.to(k.device)
+        d[li] = (k.index_select(2, p).detach(), v.index_select(2, p).detach())
+    return d
+
+
 # ─────────────────────────────────────────────────────────────
 # 프롬프트·구간·후보 구성
 # ─────────────────────────────────────────────────────────────
@@ -283,15 +306,12 @@ def _load_pairs(single_token_only=False):
 
 
 def choose_decision_pair(pairs):
-    """결정 지점 후보(조건 공통 고정 문자열). 점수 무관·안정 기준으로 하나 고정(규칙 2).
+    """결정 지점 후보(규칙 2) — **작업 지시와 의미가 일치하는 고정 쌍**(DECISION_PAIR).
 
-    단일 토큰 분기 쌍 중 이름 문자열 사전순 첫 번째. 이 쌍은 context pool에서 제외한다.
+    사전순 임의 선택은 작업(`formats a value for display`)과 무관한 이름(applyInvoice)이 뽑혀
+    부적합했다. 이제 작업과 맞는 formatValue/format_value로 고정한다. context pool에선 제외된다.
     """
-    st = sorted((p for p in pairs if p.get("single_token_divergence")),
-                key=lambda p: p["camel"])
-    if not st:
-        st = sorted(pairs, key=lambda p: p["camel"])
-    return st[0]
+    return dict(DECISION_PAIR)
 
 
 def split_context_pairs(pairs, decision):
@@ -341,10 +361,14 @@ def build_prompt(tokenizer, ctx_pair, ctx_style, seed, n_filler):
     enc = tokenizer(prompt_text, return_offsets_mapping=True, add_special_tokens=False)
     offsets, input_ids = enc["offset_mapping"], enc["input_ids"]
 
-    # 선행 코드 블록 구간(치환 대상). 준수/위반 두 조건에서 이름 토큰만 다르므로,
+    # 선행 코드 블록 구간(주 치환 대상). 준수/위반 두 조건에서 이름 토큰만 다르므로,
     # 블록 전체를 치환 구간으로 잡아도 이름 이전은 donor=self(무변화), 이름 이후만 실제 치환.
     cp = prompt_text.find(prefix)
     code_pos = _char_span_to_tokens(offsets, cp, cp + len(prefix)) if cp != -1 else []
+
+    # context 함수 span(조건 간 실제로 다른 핵심 구간) — 무관 코드 대조를 만들 때 제외용.
+    cf = prompt_text.find(ctx_body, cp) if cp != -1 else -1
+    ctxfunc_pos = _char_span_to_tokens(offsets, cf, cf + len(ctx_body)) if cf != -1 else []
 
     # 지침 구간(P2 대상).
     instr = INSTRUCTION_RULE[INSTRUCTION].strip()
@@ -352,7 +376,7 @@ def build_prompt(tokenizer, ctx_pair, ctx_style, seed, n_filler):
     instr_pos = _char_span_to_tokens(offsets, ci, ci + len(instr)) if ci != -1 else []
 
     return dict(prompt_text=prompt_text, input_ids=input_ids, prompt_len=len(input_ids),
-                code_pos=code_pos, instr_pos=instr_pos)
+                code_pos=code_pos, ctxfunc_pos=ctxfunc_pos, instr_pos=instr_pos)
 
 
 def decision_strings(decision):
@@ -456,10 +480,27 @@ def prepare_session(model, tokenizer, torch, ctx_pair, decision, seed, n_filler)
     ids = a["input_ids"]
     prefix_len = len(ids) - 1
     trigger_id = ids[-1]
-    code_pos_t = torch.tensor([p for p in a["code_pos"] if p < prefix_len],
-                              dtype=torch.long)
-    instr_pos_t = torch.tensor([p for p in a["instr_pos"] if p < prefix_len],
-                               dtype=torch.long)
+
+    def clip(ps):
+        return [p for p in ps if SINK <= p < prefix_len]
+
+    code_pos = clip(a["code_pos"])
+    ctxfunc_pos = clip(a.get("ctxfunc_pos", []))
+    instr_pos = clip(a["instr_pos"])
+    # 대조용 위치 집합:
+    #   irrel_code = 코드 블록 안이지만 context 함수(진짜 다른 구간)를 뺀 filler 코드
+    #     → 두 조건에서 내용 동일 → donor=self → Δ≈0 (같은 층·group 규모의 특이성 대조).
+    #   noncode = 코드·지침 밖 prefix(시스템/유저 보일러플레이트) → 동일 → Δ≈0.
+    ctxfunc_set = set(ctxfunc_pos)
+    irrel_code_pos = [p for p in code_pos if p not in ctxfunc_set]
+    seg_set = set(code_pos) | set(instr_pos)
+    noncode_pos = [p for p in range(SINK, prefix_len) if p not in seg_set][:len(code_pos)]
+
+    def T(ps):
+        return torch.tensor(ps, dtype=torch.long)
+
+    pos = {"code": T(code_pos), "ctxfunc": T(ctxfunc_pos), "instr": T(instr_pos),
+           "irrel_code": T(irrel_code_pos), "noncode": T(noncode_pos)}
 
     # prefix(마지막 trigger 토큰 제외) prefill → 캐시. 개입 없이(iv_off) 표준 경로.
     iv_off()
@@ -470,24 +511,12 @@ def prepare_session(model, tokenizer, torch, ctx_pair, decision, seed, n_filler)
             out = model(input_ids=inp, use_cache=True)
         kv[s] = _extract_kv(out.past_key_values)
 
-    # donor(준수=camel)·self(위반=snake) 코드 구간 열 슬라이스 — 층별 (k,v).
-    cpos_dev = code_pos_t.to(model.device)
-
-    def slice_donor(legacy):
-        d = {}
-        for li, (k, v) in enumerate(legacy):
-            d[li] = (k.index_select(2, cpos_dev).detach(),
-                     v.index_select(2, cpos_dev).detach())
-        return d
-
     return dict(
         ctx_pair=ctx_pair, seed=seed, n_filler=n_filler,
         prefix_len=prefix_len, trigger_id=trigger_id,
-        code_pos=code_pos_t, instr_pos=instr_pos_t,
+        pos=pos, instr_pos=pos["instr"],
         yc_ids=yc, yv_ids=yv,
-        kv_viol=kv["snake"], kv_comp=kv["camel"],
-        donor_comp=slice_donor(kv["camel"]),      # 준수 실행 값 (P1a 주입용)
-        donor_self=slice_donor(kv["snake"]),      # 위반 자기 값 (no-op 대조용)
+        kv_viol=kv["snake"], kv_comp=kv["camel"],   # 손상(위반)·준수 prefix 캐시(불변, 재사용)
         n_diff=len(diff), n_layers=len(kv["snake"]),
         n_kv_heads=kv["snake"][0][0].shape[1],
     ), None
@@ -553,6 +582,8 @@ def run_a(args):
     pairs = _load_pairs()
     decision = choose_decision_pair(pairs)
     a_pairs, _ = split_context_pairs(pairs, decision)
+    if args.max_pairs:
+        a_pairs = a_pairs[:args.max_pairs]
     done = load_done(args.out)
     seeds = list(range(args.seed_start, args.seed_start + args.n_seeds))
 
@@ -582,64 +613,70 @@ def run_a(args):
     print_summary(args.out)
 
 
-def _configs_b(args, n_layers, n_kv_heads):
-    """B분할에서 돌릴 개입 config 목록. (config_key, kind, params)."""
-    cfgs = []
+def _configs_b(args, n_layers, n_kv_heads, n_q_heads):
+    """B분할 개입 config 목록. (config_key, kind, params).
+
+    설계 핵심(리뷰 반영):
+      · **P1a 주 조건 = L25 단독 × 전 KV group**(코드 K/V 이식). 2단계에서 재현된 L25가
+        원인인지 검정.  전 층 각각을 같은 규모(1층×전 group)로 돌려, **L25 아닌 층들의 효과
+        분포가 규모-일치 귀무분포**가 된다(무작위 층 대조를 결정적·포괄적으로 대체).
+      · `p1a_full`(전 층×전 group)은 회복 상한선·양성 대조.
+      · 음성 대조는 전부 **L25와 동일 규모**(1층×전 group), 위치만 바꿔 특이성 확인:
+        no-op(donor=self)·지침 구간·무관 코드(filler)·코드 외 구간 → 모두 Δ≈0 기대.
+      · P2 = 지침 α×λ. 전 층×전 head λ 곡선(단조성) + 전 층 국소(층별 귀무).
+    """
+    main = args.main_layer
+    aux = args.aux_layers
     layers_all = list(range(n_layers))
+    cfgs = []
+
     if args.p1a:
-        # 주 결과: 전 층 × 전 KV group 동시 치환(완전 회복 추정).
         cfgs.append(("p1a_full", "p1a",
-                     dict(groups=None, layers=None, donor="comp")))
-        # 국소화 스윕: 각 층 × 각 KV group 단독. (계획서: 전 층 × KV group 4)
+                     dict(pos="code", donor="comp", groups=None, layers=None)))
+        # 층별 단독(전 층) — 주(L25)·보조(aux)·귀무(나머지)가 한 규모로 나온다.
+        for li in layers_all:
+            cfgs.append((f"p1a_L{li}_allG", "p1a",
+                         dict(pos="code", donor="comp", groups=None, layers=[li])))
+        # L25 규모 음성 대조(위치만 교체) — 특이성.
+        for pos_name, tag in (("code", "noop"), ("instr", "instr"),
+                              ("irrel_code", "irrel"), ("noncode", "noncode")):
+            donor = "self" if tag == "noop" else "comp"
+            cfgs.append((f"ctl_{tag}_L{main}", "p1a",
+                         dict(pos=pos_name, donor=donor, groups=None, layers=[main])))
         if args.sweep:
-            for li in layers_all:
+            # group별 국소화 — 후보 층에서 KV group 4개 단독.
+            for li in [main] + aux:
                 for g in range(n_kv_heads):
                     cfgs.append((f"p1a_L{li}_G{g}", "p1a",
-                                 dict(groups=[g], layers=[li], donor="comp")))
+                                 dict(pos="code", donor="comp", groups=[g], layers=[li])))
+
     if args.p2:
-        # 주 결과 후보: 전 층 × 전 head × λ (질량 보존). λ=1은 no-op 확인.
-        for lam in LAMBDAS:
+        for lam in LAMBDAS:                                  # 전 층×전 head λ 곡선(단조성)
             cfgs.append((f"p2_all_lam{lam}", "p2",
                          dict(lam=lam, heads=None, layers=None, conserve=True)))
             cfgs.append((f"p2_all_lam{lam}_noncons", "p2",
                          dict(lam=lam, heads=None, layers=None, conserve=False)))
+        for li in layers_all:                                # 전 층 국소(층별 귀무)
+            for lam in LAMBDAS:
+                cfgs.append((f"p2_L{li}_lam{lam}", "p2",
+                             dict(lam=lam, heads=None, layers=[li], conserve=True)))
         if args.sweep:
-            for li in layers_all:
-                for lam in LAMBDAS:
-                    cfgs.append((f"p2_L{li}_lam{lam}", "p2",
-                                 dict(lam=lam, heads=None, layers=[li], conserve=True)))
-    if args.controls:
-        # 음성 대조(효과 없어야 함) → 귀무분포.
-        cfgs.append(("ctl_noop", "p1a",
-                     dict(groups=None, layers=None, donor="self")))        # donor=self
-        cfgs.append(("ctl_instr_patch", "p1a_instr",
-                     dict(groups=None, layers=None, donor="comp")))        # 지침 구간(비트 동일)
-        for r in range(args.n_random):
-            cfgs.append((f"ctl_random_{r}", "p1a_random",
-                         dict(donor="comp", rseed=1000 + r)))              # 무작위 단위
+            # 층 × query head 28개 순회 — 후보 층에서.
+            for li in [main] + aux:
+                for h in range(n_q_heads):
+                    for lam in LAMBDAS:
+                        cfgs.append((f"p2_L{li}_H{h}_lam{lam}", "p2",
+                                     dict(lam=lam, heads=[h], layers=[li], conserve=True)))
     return cfgs
 
 
 def _apply_config(torch, sess, kind, params):
-    """config에 맞춰 _IVX를 세팅. 반환: 개입에 쓸 prefix 캐시(위반본)."""
-    donor = sess["donor_comp"] if params.get("donor") == "comp" else sess["donor_self"]
+    """config에 맞춰 _IVX를 세팅. 반환: 개입에 쓸 prefix 캐시(위반본, 불변 재사용)."""
     if kind == "p1a":
-        iv_p1a(donor, sess["code_pos"], groups=params.get("groups"),
-               layers=params.get("layers"))
-    elif kind == "p1a_instr":
-        # 지침 구간에 준수 donor 주입 — causal mask상 지침 K/V는 두 조건 비트 동일 → Δ≈0.
-        instr_donor = {}
-        cpos = sess["instr_pos"].to(sess["kv_comp"][0][0].device)
-        for li, (k, v) in enumerate(sess["kv_comp"]):
-            instr_donor[li] = (k.index_select(2, cpos), v.index_select(2, cpos))
-        iv_p1a(instr_donor, sess["instr_pos"], groups=None, layers=None)
-    elif kind == "p1a_random":
-        # 무작위 KV group·층에 준수 donor 주입(코드 구간이 아닌 무작위 위치).
-        rng = random.Random(params["rseed"])
-        n_layers, n_kv = sess["n_layers"], sess["n_kv_heads"]
-        rlayers = sorted(rng.sample(range(n_layers), max(1, n_layers // 4)))
-        rgroups = [rng.randrange(n_kv)]
-        iv_p1a(donor, sess["code_pos"], groups=rgroups, layers=rlayers)
+        src = sess["kv_comp"] if params["donor"] == "comp" else sess["kv_viol"]
+        positions = sess["pos"][params["pos"]]
+        donor = _slice_kv(src, positions)                    # 준수/위반 캐시의 해당 위치 열
+        iv_p1a(donor, positions, groups=params.get("groups"), layers=params.get("layers"))
     elif kind == "p2":
         iv_p2(sess["instr_pos"], params["lam"], heads=params.get("heads"),
               layers=params.get("layers"), conserve=params.get("conserve", True))
@@ -649,9 +686,12 @@ def _apply_config(torch, sess, kind, params):
 def run_b(args):
     """B분할: 개입본 준수 선호 점수 변화량 = score(개입) − score(손상)."""
     model, tok, torch = _load_model(args.model, args.dtype)
+    n_q = model.config.num_attention_heads
     pairs = _load_pairs()
     decision = choose_decision_pair(pairs)
     _, b_pairs = split_context_pairs(pairs, decision)
+    if args.max_pairs:
+        b_pairs = b_pairs[:args.max_pairs]
     done = load_done(args.out)
     seeds = list(range(args.seed_start, args.seed_start + args.n_seeds))
 
@@ -664,7 +704,7 @@ def run_b(args):
                                                  decision, args.model, why))
                 continue
             damaged, compliant = _score_baselines(model, torch, sess)
-            cfgs = _configs_b(args, sess["n_layers"], sess["n_kv_heads"])
+            cfgs = _configs_b(args, sess["n_layers"], sess["n_kv_heads"], n_q)
             for ckey, kind, params in cfgs:
                 key = ("B", ckey, pi, seed, args.model)
                 if key in done:
@@ -683,10 +723,12 @@ def run_b(args):
                     "score_damaged": damaged, "score_compliant": compliant,
                     "score_intervened": s_iv,
                     "delta": s_iv - damaged,        # 주 지표: 준수 선호 점수 변화량
+                    "pos": params.get("pos"), "layers": params.get("layers"),
+                    "groups": params.get("groups"), "heads": params.get("heads"),
                     "conserve": params.get("conserve", None),
                     "lam": params.get("lam", None),
                 })
-            print(f"  B pair{pi} seed{seed}: {len(cfgs)} configs done")
+            print(f"  B pair{pi} seed{seed}: {len(cfgs)} configs")
     print_summary(args.out)
 
 
@@ -708,9 +750,10 @@ def run_validate(args):
       V1 SDPA passthrough 정확성 — iv_off 커스텀 forward == reference SDPA(비트 근사).
       V2 no-op 불변 — P1a donor=self → 준수 선호 점수가 손상본과 정확히 동일.
       V3 지침 patch ≈ 0 — 지침 구간 K/V 치환 Δ≈0(causal mask상 비트 동일).
-      V4 GQA 단위 — n_q_heads=28·n_kv_heads=4 확인, P1a=KV group·P2=query head(규칙 4).
+      V4 GQA 단위 — n_q_heads·n_kv_heads 정합, P1a=KV group·P2=query head(규칙 4).
       V5 P2 질량 보존 — 재정규화 후 α 행합 == 1.
       V6 λ=1 항등 — P2 conserve·λ=1은 개입 없음과 동일.
+      V7 주 층(L25) 이식이 손상 대비 점수를 움직이는지(하네스 sanity, 부호는 본실험).
     """
     model, tok, torch = _load_model(args.model_validate, "fp32")
     cfg = model.config
@@ -752,9 +795,10 @@ def run_validate(args):
         "matches_plan_28x4": (n_q == 28 and n_kv == 4),
     }
 
-    # V2 — no-op 불변 (donor=self)
-    iv_p1a(sess["donor_self"], sess["code_pos"], groups=None, layers=None)
-    s_noop = pref_score(model, torch, sess["kv_viol"], sess["prefix_len"],
+    # V2 — no-op 불변 (전 층 코드 구간, donor=self)
+    prefix_kv = _apply_config(torch, sess, "p1a",
+                              dict(pos="code", donor="self", groups=None, layers=None))
+    s_noop = pref_score(model, torch, prefix_kv, sess["prefix_len"],
                         sess["trigger_id"], sess["yc_ids"], sess["yv_ids"])
     iv_off()
     results["V2_noop_invariance"] = {
@@ -762,14 +806,28 @@ def run_validate(args):
         "abs_diff": abs(s_noop - damaged),
     }
 
-    # V3 — 지침 patch ≈ 0
-    prefix_kv = _apply_config(torch, sess, "p1a_instr", dict(donor="comp"))
+    # V3 — 지침 patch ≈ 0 (지침 구간 K/V는 두 조건 비트 동일 → 이식해도 무변화)
+    prefix_kv = _apply_config(torch, sess, "p1a",
+                              dict(pos="instr", donor="comp", groups=None, layers=None))
     s_instr = pref_score(model, torch, prefix_kv, sess["prefix_len"],
                          sess["trigger_id"], sess["yc_ids"], sess["yv_ids"])
     iv_off()
     results["V3_instr_patch_zero"] = {
         "pass": abs(s_instr - damaged) < 1e-3,
         "abs_diff": abs(s_instr - damaged),
+    }
+
+    # V7 — L25 주 조건이 실제로 무언가 바꾸는가(하네스가 죽어있지 않은지 sanity, 방향 무관)
+    prefix_kv = _apply_config(torch, sess, "p1a",
+                              dict(pos="code", donor="comp", groups=None,
+                                   layers=[args.main_layer]))
+    s_main = pref_score(model, torch, prefix_kv, sess["prefix_len"],
+                        sess["trigger_id"], sess["yc_ids"], sess["yv_ids"])
+    iv_off()
+    results["V7_mainlayer_moves"] = {
+        "pass": True,      # 값만 보고(방향은 본실험에서), NaN/무변화만 아니면 OK
+        "layer": args.main_layer, "delta_vs_damaged": s_main - damaged,
+        "note": "L25 코드 이식이 손상 대비 점수를 이동시키는지(부호는 본실험 판정)",
     }
 
     # V5 — P2 질량 보존 + V6 λ=1 항등
@@ -852,7 +910,68 @@ def _mean(xs):
     return sum(xs) / len(xs) if xs else None
 
 
-def print_summary(out_path):
+# ── cluster bootstrap (이름쌍·seed 클러스터, 2단계와 동일 계열) ──
+
+def _cluster_key(r):
+    return (r.get("ctx_camel"), r.get("seed"))
+
+
+def _cluster_means(rows, value="delta"):
+    """클러스터별 평균값 목록으로. 클러스터 = (이름쌍, seed) — 반복측정 반영."""
+    from collections import defaultdict
+    g = defaultdict(list)
+    for r in rows:
+        v = r.get(value)
+        if v is not None:
+            g[_cluster_key(r)].append(v)
+    return [sum(v) / len(v) for v in g.values()]
+
+
+def _boot_ci(cluster_vals, n_boot=2000, boot_seed=12345, lo=2.5, hi=97.5):
+    """클러스터 평균들을 재표본해 평균의 95% CI. (클러스터 단위 부트스트랩)."""
+    if not cluster_vals:
+        return (None, None, None)
+    m = sum(cluster_vals) / len(cluster_vals)
+    rng = random.Random(boot_seed)
+    n = len(cluster_vals)
+    means = []
+    for _ in range(n_boot):
+        s = [cluster_vals[rng.randrange(n)] for _ in range(n)]
+        means.append(sum(s) / n)
+    means.sort()
+    return (m, means[int(lo / 100 * n_boot)], means[min(int(hi / 100 * n_boot), n_boot - 1)])
+
+
+def _ratio_ci(num_clusters, den_mean_boot, n_boot=2000, boot_seed=777):
+    """Recovery Ratio CI — 분자(B config 클러스터)와 분모(A gap 부트분포)를 독립 재표본해 비율."""
+    if not num_clusters or not den_mean_boot:
+        return (None, None, None)
+    rng = random.Random(boot_seed)
+    n = len(num_clusters)
+    ratios = []
+    for _ in range(n_boot):
+        num = sum(num_clusters[rng.randrange(n)] for _ in range(n)) / n
+        den = den_mean_boot[rng.randrange(len(den_mean_boot))]
+        if abs(den) > 1e-9:
+            ratios.append(num / den)
+    if not ratios:
+        return (None, None, None)
+    ratios.sort()
+    m = sum(ratios) / len(ratios)
+    return (m, ratios[int(0.025 * len(ratios))], ratios[int(0.975 * len(ratios))])
+
+
+def _gap_boot(a_rows, n_boot=2000, boot_seed=999):
+    cl = _cluster_means(a_rows, value="gap")
+    if not cl:
+        return None, []
+    rng = random.Random(boot_seed)
+    n = len(cl)
+    means = [sum(cl[rng.randrange(n)] for _ in range(n)) / n for _ in range(n_boot)]
+    return sum(cl) / n, means
+
+
+def print_summary(out_path, n_boot=2000):
     rows = _load_rows(out_path)
     if not rows:
         print(f"(레코드 없음: {out_path})")
@@ -861,37 +980,107 @@ def print_summary(out_path):
     b = [r for r in rows if r.get("split") == "B" and "delta" in r]
     print(f"\n=== 3단계 개입 집계 [{DESIGN_VERSION}] ===  A={len(a)} B={len(b)}")
 
-    gap_a = _mean([r["gap"] for r in a])
-    if gap_a:
-        print(f"A분할 기저 gap(준수−손상) 평균 = {gap_a:+.4f}   (완전 회복 목표)")
+    gap_mean, gap_boot = _gap_boot(a, n_boot)
+    if gap_mean is not None:
+        gm, glo, ghi = _boot_ci(_cluster_means(a, "gap"), n_boot)
+        print(f"A분할 기저 gap(준수−손상) = {gm:+.4f}  95%CI[{glo:+.4f},{ghi:+.4f}] "
+              f"(완전 회복 목표=분모)")
 
-    # config별 개입 변화량
     from collections import defaultdict
     by_cfg = defaultdict(list)
     for r in b:
-        by_cfg[r["config_key"]].append(r["delta"])
+        by_cfg[r["config_key"]].append(r)
 
-    # 귀무분포 = 무작위 단위 대조들의 변화량
-    null = [d for k, v in by_cfg.items() if k.startswith("ctl_random")
-            for d in v]
+    def stat(ckey):
+        cl = _cluster_means(by_cfg[ckey], "delta")
+        m, lo, hi = _boot_ci(cl, n_boot)
+        return cl, m, lo, hi
 
-    def tail_p(delta_mean):
-        if not null or delta_mean is None:
+    # ── 규모-일치 귀무분포: 층별 단독(p1a_L*_allG) 중 주 층(L25) 제외한 나머지 층들의
+    #    '층 평균 효과' 분포. 주 조건(L25)과 같은 규모(1층×전 group)라 공정 비교. ──
+    per_layer = {}
+    for ckey, rws in by_cfg.items():
+        if ckey.startswith("p1a_L") and ckey.endswith("_allG"):
+            li = int(ckey[len("p1a_L"):-len("_allG")])
+            per_layer[li] = _mean([r["delta"] for r in rws])
+    main_layer = _main_from(rows)
+    null_layer_effects = [eff for li, eff in per_layer.items()
+                          if li != main_layer and eff is not None]
+
+    def layer_tail_p(eff):
+        if eff is None or not null_layer_effects:
             return None
-        ge = sum(1 for d in null if d >= delta_mean)
-        return (ge + 1) / (len(null) + 1)
+        ge = sum(1 for x in null_layer_effects if x is not None and x >= eff)
+        return (ge + 1) / (len(null_layer_effects) + 1)
 
-    print("\nconfig                         평균Δ      RecoveryRatio   상위꼬리p(vs무작위)")
-    for ckey in sorted(by_cfg):
-        dm = _mean(by_cfg[ckey])
-        rr = (dm / gap_a) if (gap_a and dm is not None) else None
-        p = tail_p(dm)
-        rr_s = f"{rr:+.3f}" if rr is not None else "   -  "
-        p_s = f"{p:.4f}" if p is not None else "  -   "
-        print(f"  {ckey:28s} {dm:+.4f}    {rr_s:>10s}    {p_s:>8s}")
+    # ── P1a 주 결과 ──
+    print("\n── P1a (코드 K/V 이식) ──")
+    print(f"{'config':26s} {'평균Δ':>9s} {'95%CI':>20s} {'RecovRatio':>11s} {'층귀무p':>8s}")
+    p1a_keys = [f"p1a_L{main_layer}_allG", "p1a_full"] + \
+               sorted(k for k in by_cfg if k.startswith("p1a_L") and k.endswith("_allG")
+                      and k != f"p1a_L{main_layer}_allG")
+    for ckey in p1a_keys:
+        if ckey not in by_cfg:
+            continue
+        cl, m, lo, hi = stat(ckey)
+        rr = _ratio_ci(cl, gap_boot, n_boot)
+        li = None
+        if ckey.startswith("p1a_L") and ckey.endswith("_allG"):
+            li = int(ckey[len("p1a_L"):-len("_allG")])
+        p = layer_tail_p(per_layer.get(li)) if li is not None else None
+        star = "  ← 주(L25)" if li == main_layer else (" (상한)" if ckey == "p1a_full" else "")
+        ci = f"[{lo:+.4f},{hi:+.4f}]" if lo is not None else ""
+        rr_s = f"{rr[0]:+.2f}" if rr[0] is not None else "-"
+        p_s = f"{p:.4f}" if p is not None else "-"
+        print(f"{ckey:26s} {m:+.4f} {ci:>20s} {rr_s:>11s} {p_s:>8s}{star}")
 
-    print("\n※ 주 판정: P1a(p1a_full) 변화량이 무작위 대조 귀무분포의 상위 꼬리인가.")
-    print("※ no-op·지침 patch 대조는 Δ≈0이어야 한다(하네스 건전성).")
+    # ── 음성 대조(특이성) ──
+    print("\n── 음성 대조 (L25 규모, Δ≈0 기대) ──")
+    for ckey in sorted(k for k in by_cfg if k.startswith("ctl_")):
+        cl, m, lo, hi = stat(ckey)
+        ci = f"[{lo:+.4f},{hi:+.4f}]" if lo is not None else ""
+        print(f"{ckey:26s} {m:+.4f} {ci:>20s}")
+
+    # ── P2 λ 단조 추세 ──
+    lam_means = []
+    for lam in LAMBDAS:
+        k = f"p2_all_lam{lam}"
+        if k in by_cfg:
+            lam_means.append((lam, _mean([r["delta"] for r in by_cfg[k]])))
+    if lam_means:
+        print("\n── P2 (지침 α×λ, 전 층·전 head, 질량보존) ──")
+        for lam, m in lam_means:
+            print(f"  λ={lam:<4} 평균Δ={m:+.4f}" if m is not None else f"  λ={lam}: -")
+        rho = _spearman([x for x, _ in lam_means],
+                        [y for _, y in lam_means if y is not None])
+        print(f"  단조 추세(Spearman ρ, λ vs Δ) = "
+              f"{rho:+.3f}" if rho is not None else "  추세: -")
+
+    print("\n※ 주 판정: p1a_L{}_allG 효과가 나머지 층(같은 규모) 귀무분포의 상위 꼬리인가."
+          .format(main_layer))
+    print("※ 건전성: ctl_noop=0(정확)·ctl_instr/irrel/noncode≈0. p1a_full은 회복 상한.")
+    print("※ RecoveryRatio = config 효과 ÷ A분할 gap (분자·분모 독립 부트).")
+
+
+def _main_from(rows):
+    """레코드에서 주 층을 역추론(없으면 상수). p1a_L{n}_allG 중 주 조건 표시가 없으니 MAIN_LAYER."""
+    return MAIN_LAYER
+
+
+def _spearman(xs, ys):
+    if len(xs) != len(ys) or len(xs) < 2:
+        return None
+
+    def rank(v):
+        order = sorted(range(len(v)), key=lambda i: v[i])
+        r = [0] * len(v)
+        for pos, i in enumerate(order):
+            r[i] = pos
+        return r
+    rx, ry = rank(xs), rank(ys)
+    n = len(xs)
+    d2 = sum((rx[i] - ry[i]) ** 2 for i in range(n))
+    return 1 - 6 * d2 / (n * (n * n - 1))
 
 
 # ─────────────────────────────────────────────────────────────
@@ -907,7 +1096,12 @@ def main():
     ap.add_argument("--n-seeds", type=int, default=3)
     ap.add_argument("--seed-start", type=int, default=0)
     ap.add_argument("--n-filler", type=int, default=6)
-    ap.add_argument("--n-random", type=int, default=8, help="무작위 단위 대조 수")
+    ap.add_argument("--max-pairs", type=int, default=0,
+                    help="파일럿용 — context pair 수 제한(0=전체 50)")
+    ap.add_argument("--main-layer", type=int, default=MAIN_LAYER,
+                    help="주 개입 층(2단계 재현 L25)")
+    ap.add_argument("--aux-layers", type=str, default=",".join(map(str, AUX_LAYERS)),
+                    help="보조 분석 층(쉼표 구분)")
     # 모드
     ap.add_argument("--validate", action="store_true", help="불변식 자기검증(게이트)")
     ap.add_argument("--run-a", action="store_true", help="A분할: 기저 gap")
@@ -916,9 +1110,9 @@ def main():
     # B분할 개입 선택
     ap.add_argument("--p1a", action="store_true", help="P1a(주) 실행")
     ap.add_argument("--p2", action="store_true", help="P2(보조) 실행")
-    ap.add_argument("--controls", action="store_true", help="음성 대조 실행")
-    ap.add_argument("--sweep", action="store_true", help="층×단위 국소화 스윕까지")
+    ap.add_argument("--sweep", action="store_true", help="group별·층×head 국소화 스윕까지")
     args = ap.parse_args()
+    args.aux_layers = [int(x) for x in str(args.aux_layers).split(",") if x.strip() != ""]
 
     if args.validate:
         ok = run_validate(args)
@@ -926,8 +1120,8 @@ def main():
     if args.run_a:
         run_a(args)
     elif args.run_b:
-        if not (args.p1a or args.p2 or args.controls):
-            args.p1a = args.p2 = args.controls = True   # 기본: 전부
+        if not (args.p1a or args.p2):
+            args.p1a = args.p2 = True                   # 기본: 둘 다(대조군은 P1a에 포함)
         run_b(args)
     elif args.summary_only:
         print_summary(args.out)
