@@ -366,9 +366,11 @@ def build_prompt(tokenizer, ctx_pair, ctx_style, seed, n_filler):
     cp = prompt_text.find(prefix)
     code_pos = _char_span_to_tokens(offsets, cp, cp + len(prefix)) if cp != -1 else []
 
-    # context 함수 span(조건 간 실제로 다른 핵심 구간) — 무관 코드 대조를 만들 때 제외용.
+    # context 함수 span(조건 간 실제로 다른 핵심 구간). 그 안의 **이름 토큰 span**도 따로.
     cf = prompt_text.find(ctx_body, cp) if cp != -1 else -1
     ctxfunc_pos = _char_span_to_tokens(offsets, cf, cf + len(ctx_body)) if cf != -1 else []
+    cn = prompt_text.find(name, cf) if cf != -1 else -1
+    ctxname_pos = _char_span_to_tokens(offsets, cn, cn + len(name)) if cn != -1 else []
 
     # 지침 구간(P2 대상).
     instr = INSTRUCTION_RULE[INSTRUCTION].strip()
@@ -376,7 +378,8 @@ def build_prompt(tokenizer, ctx_pair, ctx_style, seed, n_filler):
     instr_pos = _char_span_to_tokens(offsets, ci, ci + len(instr)) if ci != -1 else []
 
     return dict(prompt_text=prompt_text, input_ids=input_ids, prompt_len=len(input_ids),
-                code_pos=code_pos, ctxfunc_pos=ctxfunc_pos, instr_pos=instr_pos)
+                code_pos=code_pos, ctxfunc_pos=ctxfunc_pos, ctxname_pos=ctxname_pos,
+                instr_pos=instr_pos)
 
 
 def decision_strings(decision):
@@ -486,21 +489,28 @@ def prepare_session(model, tokenizer, torch, ctx_pair, decision, seed, n_filler)
 
     code_pos = clip(a["code_pos"])
     ctxfunc_pos = clip(a.get("ctxfunc_pos", []))
+    ctxname_pos = clip(a.get("ctxname_pos", []))
     instr_pos = clip(a["instr_pos"])
-    # 대조용 위치 집합:
-    #   irrel_code = 코드 블록 안이지만 context 함수(진짜 다른 구간)를 뺀 filler 코드
-    #     → 두 조건에서 내용 동일 → donor=self → Δ≈0 (같은 층·group 규모의 특이성 대조).
-    #   noncode = 코드·지침 밖 prefix(시스템/유저 보일러플레이트) → 동일 → Δ≈0.
-    ctxfunc_set = set(ctxfunc_pos)
-    irrel_code_pos = [p for p in code_pos if p not in ctxfunc_set]
-    seg_set = set(code_pos) | set(instr_pos)
-    noncode_pos = [p for p in range(SINK, prefix_len) if p not in seg_set][:len(code_pos)]
+    # 대조용 위치 집합 — **downstream 전파 문제 반영(리뷰)**:
+    #   context 함수 이전(pre) 구간은 위반 신호를 아직 안 읽어 두 조건 K/V가 진짜 동일 → Δ≈0.
+    #   context 함수 이후(post) 구간은 문자열이 같아도 앞선 위반 이름을 attention으로 읽은
+    #     downstream이라 K/V가 다를 수 있다 → "0" 단정 금지, **전파 대조**로 따로 본다.
+    ctx_start = min(ctxfunc_pos) if ctxfunc_pos else prefix_len
+    ctx_end = max(ctxfunc_pos) if ctxfunc_pos else 0
+    prectx_pos = [p for p in range(SINK, ctx_start) if p not in set(instr_pos)]
+    postctx_pos = [p for p in code_pos if p > ctx_end]
 
     def T(ps):
         return torch.tensor(ps, dtype=torch.long)
 
-    pos = {"code": T(code_pos), "ctxfunc": T(ctxfunc_pos), "instr": T(instr_pos),
-           "irrel_code": T(irrel_code_pos), "noncode": T(noncode_pos)}
+    pos = {
+        "code": T(code_pos),            # 선행 코드 전체(주 개입 범위)
+        "ctxfunc": T(ctxfunc_pos),      # context 함수 전체(중간 범위)
+        "ctxname": T(ctxname_pos),      # context 함수 이름 토큰만(최소 범위 — 2단계 이름 신호)
+        "instr": T(instr_pos),          # 지침(비트 동일 → ≈0 대조)
+        "prectx": T(prectx_pos),        # context 이전(진짜 무변화 대조 → ≈0)
+        "postctx": T(postctx_pos),      # context 이후(downstream 전파 대조 → 0 아닐 수 있음)
+    }
 
     # prefix(마지막 trigger 토큰 제외) prefill → 캐시. 개입 없이(iv_off) 표준 경로.
     iv_off()
@@ -637,10 +647,19 @@ def _configs_b(args, n_layers, n_kv_heads, n_q_heads):
         for li in layers_all:
             cfgs.append((f"p1a_L{li}_allG", "p1a",
                          dict(pos="code", donor="comp", groups=None, layers=[li])))
-        # L25 규모 음성 대조(위치만 교체) — 특이성.
-        for pos_name, tag in (("code", "noop"), ("instr", "instr"),
-                              ("irrel_code", "irrel"), ("noncode", "noncode")):
-            donor = "self" if tag == "noop" else "comp"
+        # L25 단계적 범위(보조) — 원인이 이름 토큰인지 이후 전파 표현인지 구분.
+        #   name(이름만) ⊂ func(함수 전체) ⊂ code(선행 코드 전체=주).
+        cfgs.append((f"p1a_L{main}_name", "p1a",
+                     dict(pos="ctxname", donor="comp", groups=None, layers=[main])))
+        cfgs.append((f"p1a_L{main}_func", "p1a",
+                     dict(pos="ctxfunc", donor="comp", groups=None, layers=[main])))
+        # L25 규모 대조(위치만 교체):
+        #   noop=자기이식(정확0)·instr=지침(비트동일≈0)·prectx=context 이전(진짜≈0)
+        #   postctx=context 이후(downstream 전파 — 0 단정 금지, 특이성 참고).
+        for pos_name, tag, donor in (("code", "noop", "self"),
+                                     ("instr", "instr", "comp"),
+                                     ("prectx", "prectx", "comp"),
+                                     ("postctx", "postctx", "comp")):
             cfgs.append((f"ctl_{tag}_L{main}", "p1a",
                          dict(pos=pos_name, donor=donor, groups=None, layers=[main])))
         if args.sweep:
@@ -817,17 +836,22 @@ def run_validate(args):
         "abs_diff": abs(s_instr - damaged),
     }
 
-    # V7 — L25 주 조건이 실제로 무언가 바꾸는가(하네스가 죽어있지 않은지 sanity, 방향 무관)
+    # V7 — L25 코드 이식이 실제로 점수를 움직이는가(하네스가 죽어있지 않은지, **부호 무관**).
+    #   서로 다른 K/V를 L25에 넣으면 출력은 반드시 바뀐다 — 정확히 0이거나 NaN이면 배관 결함.
+    #   기준: 유한 + |Δ| > 수치 바닥(1e-8). 작지만 0 아닌 실제 효과는 통과(효과 크기 판정 아님).
+    import math
+    delta_main = s_main = None
     prefix_kv = _apply_config(torch, sess, "p1a",
                               dict(pos="code", donor="comp", groups=None,
                                    layers=[args.main_layer]))
     s_main = pref_score(model, torch, prefix_kv, sess["prefix_len"],
                         sess["trigger_id"], sess["yc_ids"], sess["yv_ids"])
     iv_off()
+    delta_main = s_main - damaged
     results["V7_mainlayer_moves"] = {
-        "pass": True,      # 값만 보고(방향은 본실험에서), NaN/무변화만 아니면 OK
-        "layer": args.main_layer, "delta_vs_damaged": s_main - damaged,
-        "note": "L25 코드 이식이 손상 대비 점수를 이동시키는지(부호는 본실험 판정)",
+        "pass": bool(math.isfinite(delta_main) and abs(delta_main) > 1e-8),
+        "layer": args.main_layer, "delta_vs_damaged": delta_main,
+        "note": "L25 코드 이식이 손상 대비 점수를 이동(유한·비영)시키는지. 부호·크기는 본실험 판정.",
     }
 
     # V5 — P2 질량 보존 + V6 λ=1 항등
@@ -910,65 +934,71 @@ def _mean(xs):
     return sum(xs) / len(xs) if xs else None
 
 
-# ── cluster bootstrap (이름쌍·seed 클러스터, 2단계와 동일 계열) ──
+# ── two-way cluster bootstrap (이름쌍·seed 두 margin 독립 재표본) ──
+#   config 하나당 (이름쌍, seed) 셀에 관측 1개뿐이라, 단순 (pair,seed) 클러스터를 재표본하면
+#   사실상 iid 재표본과 같다(반복 문맥 구조 미반영). 그래서 **이름쌍 50개와 seed 3개를 각각
+#   독립 복원추출**하고 그 교차셀 평균을 통계로 쓴다(crossed/two-way cluster bootstrap).
 
-def _cluster_key(r):
-    return (r.get("ctx_camel"), r.get("seed"))
-
-
-def _cluster_means(rows, value="delta"):
-    """클러스터별 평균값 목록으로. 클러스터 = (이름쌍, seed) — 반복측정 반영."""
+def _cells(rows, value):
+    """(이름쌍, seed)→값 셀 표. 같은 셀 다중값은 평균. 반환: (cell, pairs, seeds)."""
     from collections import defaultdict
-    g = defaultdict(list)
+    acc = defaultdict(list)
+    pairs, seeds = set(), set()
     for r in rows:
         v = r.get(value)
-        if v is not None:
-            g[_cluster_key(r)].append(v)
-    return [sum(v) / len(v) for v in g.values()]
+        if v is None:
+            continue
+        p, s = r.get("ctx_camel"), r.get("seed")
+        acc[(p, s)].append(v)
+        pairs.add(p)
+        seeds.add(s)
+    cell = {k: sum(v) / len(v) for k, v in acc.items()}
+    return cell, sorted(pairs, key=lambda x: (x is None, x)), \
+        sorted(seeds, key=lambda x: (x is None, x))
 
 
-def _boot_ci(cluster_vals, n_boot=2000, boot_seed=12345, lo=2.5, hi=97.5):
-    """클러스터 평균들을 재표본해 평균의 95% CI. (클러스터 단위 부트스트랩)."""
-    if not cluster_vals:
-        return (None, None, None)
-    m = sum(cluster_vals) / len(cluster_vals)
+def _twoway_boot(rows, value, n_boot=2000, boot_seed=12345):
+    """이름쌍·seed를 각각 복원추출해 교차셀 평균의 부트 분포. 반환: (point, boot_list)."""
+    cell, pairs, seeds = _cells(rows, value)
+    if not cell:
+        return None, []
+
+    def stat(P, S):
+        vals = [cell[(p, s)] for p in P for s in S if (p, s) in cell]
+        return sum(vals) / len(vals) if vals else None
+
+    point = stat(pairs, seeds)
     rng = random.Random(boot_seed)
-    n = len(cluster_vals)
-    means = []
+    npr, nse = len(pairs), len(seeds)
+    boot = []
     for _ in range(n_boot):
-        s = [cluster_vals[rng.randrange(n)] for _ in range(n)]
-        means.append(sum(s) / n)
-    means.sort()
-    return (m, means[int(lo / 100 * n_boot)], means[min(int(hi / 100 * n_boot), n_boot - 1)])
+        P = [pairs[rng.randrange(npr)] for _ in range(npr)]
+        S = [seeds[rng.randrange(nse)] for _ in range(nse)]
+        m = stat(P, S)
+        if m is not None:
+            boot.append(m)
+    return point, boot
 
 
-def _ratio_ci(num_clusters, den_mean_boot, n_boot=2000, boot_seed=777):
-    """Recovery Ratio CI — 분자(B config 클러스터)와 분모(A gap 부트분포)를 독립 재표본해 비율."""
-    if not num_clusters or not den_mean_boot:
+def _ci(boot, lo=2.5, hi=97.5):
+    if not boot:
+        return (None, None)
+    b = sorted(boot)
+    n = len(b)
+    return (b[int(lo / 100 * n)], b[min(int(hi / 100 * n), n - 1)])
+
+
+def _ratio_ci(num_boot, den_boot):
+    """Recovery Ratio CI — 분자(B config)·분모(A gap)의 독립 부트 분포를 index로 짝지어 비율."""
+    if not num_boot or not den_boot:
         return (None, None, None)
-    rng = random.Random(boot_seed)
-    n = len(num_clusters)
-    ratios = []
-    for _ in range(n_boot):
-        num = sum(num_clusters[rng.randrange(n)] for _ in range(n)) / n
-        den = den_mean_boot[rng.randrange(len(den_mean_boot))]
-        if abs(den) > 1e-9:
-            ratios.append(num / den)
+    m = min(len(num_boot), len(den_boot))
+    ratios = [num_boot[i] / den_boot[i] for i in range(m) if abs(den_boot[i]) > 1e-9]
     if not ratios:
         return (None, None, None)
     ratios.sort()
-    m = sum(ratios) / len(ratios)
-    return (m, ratios[int(0.025 * len(ratios))], ratios[int(0.975 * len(ratios))])
-
-
-def _gap_boot(a_rows, n_boot=2000, boot_seed=999):
-    cl = _cluster_means(a_rows, value="gap")
-    if not cl:
-        return None, []
-    rng = random.Random(boot_seed)
-    n = len(cl)
-    means = [sum(cl[rng.randrange(n)] for _ in range(n)) / n for _ in range(n_boot)]
-    return sum(cl) / n, means
+    return (sum(ratios) / len(ratios),
+            ratios[int(0.025 * len(ratios))], ratios[int(0.975 * len(ratios))])
 
 
 def print_summary(out_path, n_boot=2000):
@@ -980,11 +1010,11 @@ def print_summary(out_path, n_boot=2000):
     b = [r for r in rows if r.get("split") == "B" and "delta" in r]
     print(f"\n=== 3단계 개입 집계 [{DESIGN_VERSION}] ===  A={len(a)} B={len(b)}")
 
-    gap_mean, gap_boot = _gap_boot(a, n_boot)
+    gap_mean, gap_boot = _twoway_boot(a, "gap", n_boot, boot_seed=999)
     if gap_mean is not None:
-        gm, glo, ghi = _boot_ci(_cluster_means(a, "gap"), n_boot)
-        print(f"A분할 기저 gap(준수−손상) = {gm:+.4f}  95%CI[{glo:+.4f},{ghi:+.4f}] "
-              f"(완전 회복 목표=분모)")
+        glo, ghi = _ci(gap_boot)
+        print(f"A분할 기저 gap(준수−손상) = {gap_mean:+.4f}  95%CI[{glo:+.4f},{ghi:+.4f}] "
+              f"(완전 회복 목표=분모)  [two-way boot: 이름쌍×seed]")
 
     from collections import defaultdict
     by_cfg = defaultdict(list)
@@ -992,9 +1022,9 @@ def print_summary(out_path, n_boot=2000):
         by_cfg[r["config_key"]].append(r)
 
     def stat(ckey):
-        cl = _cluster_means(by_cfg[ckey], "delta")
-        m, lo, hi = _boot_ci(cl, n_boot)
-        return cl, m, lo, hi
+        m, boot = _twoway_boot(by_cfg[ckey], "delta", n_boot)
+        lo, hi = _ci(boot)
+        return boot, m, lo, hi
 
     # ── 규모-일치 귀무분포: 층별 단독(p1a_L*_allG) 중 주 층(L25) 제외한 나머지 층들의
     #    '층 평균 효과' 분포. 주 조건(L25)과 같은 규모(1층×전 group)라 공정 비교. ──
@@ -1023,7 +1053,7 @@ def print_summary(out_path, n_boot=2000):
         if ckey not in by_cfg:
             continue
         cl, m, lo, hi = stat(ckey)
-        rr = _ratio_ci(cl, gap_boot, n_boot)
+        rr = _ratio_ci(cl, gap_boot)
         li = None
         if ckey.startswith("p1a_L") and ckey.endswith("_allG"):
             li = int(ckey[len("p1a_L"):-len("_allG")])
@@ -1034,8 +1064,17 @@ def print_summary(out_path, n_boot=2000):
         p_s = f"{p:.4f}" if p is not None else "-"
         print(f"{ckey:26s} {m:+.4f} {ci:>20s} {rr_s:>11s} {p_s:>8s}{star}")
 
+    # ── 단계적 범위(보조) — 이름 토큰 vs 전파 표현 구분 ──
+    print("\n── L25 단계적 범위 (name ⊂ func ⊂ code) ──")
+    for ckey in [f"p1a_L{main_layer}_name", f"p1a_L{main_layer}_func",
+                 f"p1a_L{main_layer}_allG"]:
+        if ckey in by_cfg:
+            cl, m, lo, hi = stat(ckey)
+            ci = f"[{lo:+.4f},{hi:+.4f}]" if lo is not None else ""
+            print(f"{ckey:26s} {m:+.4f} {ci:>20s}")
+
     # ── 음성 대조(특이성) ──
-    print("\n── 음성 대조 (L25 규모, Δ≈0 기대) ──")
+    print("\n── 대조 (L25 규모) ──  [prectx=진짜≈0, postctx=downstream 전파(0 아닐 수 있음)]")
     for ckey in sorted(k for k in by_cfg if k.startswith("ctl_")):
         cl, m, lo, hi = stat(ckey)
         ci = f"[{lo:+.4f},{hi:+.4f}]" if lo is not None else ""
@@ -1058,8 +1097,10 @@ def print_summary(out_path, n_boot=2000):
 
     print("\n※ 주 판정: p1a_L{}_allG 효과가 나머지 층(같은 규모) 귀무분포의 상위 꼬리인가."
           .format(main_layer))
-    print("※ 건전성: ctl_noop=0(정확)·ctl_instr/irrel/noncode≈0. p1a_full은 회복 상한.")
-    print("※ RecoveryRatio = config 효과 ÷ A분할 gap (분자·분모 독립 부트).")
+    print("※ 건전성: ctl_noop=0(정확)·ctl_instr·ctl_prectx≈0. "
+          "ctl_postctx는 downstream 전파라 0 단정 금지.")
+    print("※ CI는 two-way(이름쌍×seed) cluster bootstrap. "
+          "RecoveryRatio=config 효과 ÷ A분할 gap(분자·분모 독립 부트).")
 
 
 def _main_from(rows):

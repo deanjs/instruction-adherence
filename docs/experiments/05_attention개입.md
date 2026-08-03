@@ -90,16 +90,23 @@ Qwen은 GQA(query head 28, KV head 4, 7:1 공유).
   `p1a_L{li}_allG` 중 **L25 아닌 층들의 효과 분포**. 무작위 층 대조를 결정적·포괄적으로
   대체(모든 층이 같은 규모라 공정). 주 판정 = L25가 이 분포의 상위 꼬리인가(층 귀무 p).
 - **회복 상한** = `p1a_full`(전 층×전 group). Recovery Ratio 분자 상한.
-- **음성 대조(전부 L25 규모, Δ≈0 기대)** — `ctl_noop_L25`(donor=self, 정확히 0),
-  `ctl_instr_L25`(지침 구간, 비트 동일), `ctl_irrel_L25`(코드 블록 내 filler=무관 코드,
-  동일 길이), `ctl_noncode_L25`(코드 외 구간). 위치만 바꿔 특이성 확인.
+- **단계적 범위(보조)** — 원인이 이름 토큰인지 이후 전파 표현인지 구분:
+  `p1a_L25_name`(context 이름 토큰만) ⊂ `p1a_L25_func`(함수 전체) ⊂ `p1a_L25_allG`(선행 코드 전체).
+- **대조(전부 L25 규모, 위치만 교체)** — **downstream 전파 반영**:
+  `ctl_noop_L25`(donor=self, 정확히 0), `ctl_instr_L25`(지침, 비트 동일 ≈0),
+  `ctl_prectx_L25`(**context 함수 이전** 구간 — 위반 신호 미도달 → 진짜 ≈0),
+  `ctl_postctx_L25`(**context 함수 이후** 구간 — 앞선 위반 이름을 attention으로 읽은
+  downstream이라 **0 단정 금지**, 전파 특이성 참고).
 - **P2** = 지침 α×λ. 전 층×전 head λ 곡선(**단조 추세 Spearman**) + 전 층 국소(층별 귀무).
 
-### 통계 (2단계 계열)
+### 통계 — two-way cluster bootstrap
 
-- 클러스터 = **(이름쌍, seed)**. config별 클러스터 평균의 부트스트랩으로 준수 선호 점수
-  변화량 **95% CI**. Recovery Ratio는 분자(B config)·분모(A gap)를 **독립 재표본**해 비율 CI.
-- 층 귀무 p = L25 효과가 나머지 층 효과 분포에서 차지하는 상위 꼬리 위치.
+- config당 (이름쌍, seed) 셀에 관측 1개뿐이라 (pair,seed) 단일 클러스터 재표본은 사실상
+  iid라 반복 구조를 못 담는다. 그래서 **이름쌍 50개와 seed 3개를 각각 독립 복원추출**하고
+  교차셀 평균을 통계로 쓴다(crossed two-way). 이게 이름쌍·seed 무선효과를 반영해 CI를
+  적정하게 넓힌다(합성 검증: iid 폭의 약 3배).
+- Recovery Ratio는 분자(B config)·분모(A gap)의 **독립 two-way 부트 분포**를 짝지어 비율 CI.
+- 층 귀무 p = L25 효과가 나머지 층(같은 규모) 효과 분포에서 상위 꼬리 위치.
 - P2 λ 단조성 = λ vs 평균 Δ의 Spearman ρ.
 
 ### 하네스가 절대 규칙을 강제하는 방식
