@@ -135,11 +135,14 @@ Qwen은 GQA(query head 28, KV head 4, 7:1 공유).
 
 ### 개입 메커니즘 메모
 
-- 지침 K/V는 두 조건 비트 동일 → **prefix KV 캐시는 위반본·준수본 각 1회**만 만들고(캐시
-  재사용), 후보 채점 forward에서 대상 위치 열을 준수본 donor로 덮어써 P1a 실현(모든
-  teacher-forcing step 자동 적용). donor는 준수 캐시의 해당 위치 슬라이스(임의 위치 지원 →
-  대조군도 같은 경로).
-- P2는 채점 forward에서만 지침 α에 λ(질량 보존 시 재정규화), prefill은 표준 경로(V1 비트 동일).
+- **채점은 전체 시퀀스 정사각 forward**로 한다(`[프롬프트 + 후보]` 한 번에). 캐시 재사용
+  (`past_key_values`)은 query 길이≠key 길이에서 SDPA `is_causal`이 좌상단 정렬로 오정렬돼
+  후보가 prefix를 못 봤다(파일럿에서 gap=0·V7=0로 드러남). 정사각 forward는 그 문제가 없다
+  (V1로 검증). **Colab의 "prefix 캐시 1회 재사용" 최적화는 정확성을 위해 포기** — P2 대규모
+  스윕 속도는 이후 별도 최적화(예: prefill 은닉상태 캐시).
+- 개입은 그 forward 안에서 적용: P1a는 코드 구간 `key/value` 열을 준수본 donor로 덮어쓰고
+  (모든 teacher-forcing step 자동), P2는 지침 α에 λ(질량 보존 시 재정규화). donor는 준수
+  prefill 캐시의 해당 위치 슬라이스(임의 위치 지원 → 대조군도 같은 경로).
 - **P1b/P3(탐색)는 v1/v2 미구현** — 주 가설 H3(P1a)에 집중. 기여분 분해 이식은 후속 별 파일.
 
 ---

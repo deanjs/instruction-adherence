@@ -278,17 +278,6 @@ def _extract_kv(cache):
     raise RuntimeError("알 수 없는 KV 캐시 형식")
 
 
-def _make_cache(kv_list):
-    from transformers import DynamicCache
-    try:
-        return DynamicCache.from_legacy_cache(tuple(kv_list))
-    except Exception:
-        c = DynamicCache()
-        for i, (k, v) in enumerate(kv_list):
-            c.update(k, v, i)
-        return c
-
-
 def _slice_kv(legacy, pos_tensor):
     """legacy 캐시 각 층 K/V에서 pos 열만 뽑아 donor 형태 {layer:(k_seg,v_seg)}로.
 
@@ -429,41 +418,32 @@ def candidate_ids(tokenizer, base_prompt_text, name):
 # 준수 선호 점수 (teacher forcing) — 계획서 3.5
 # ─────────────────────────────────────────────────────────────
 
-def _logprob(model, torch, prefix_kv, prefix_len, trigger_id, cand_ids):
-    """logP(cand | prefix, trigger). prefix 캐시는 불변(config마다 새 캐시로 재구성).
+def _logprob(model, torch, ids, cand_ids):
+    """logP(cand | prompt). **전체 시퀀스 정사각 forward**로 채점(캐시 재사용 안 씀).
 
-    입력 = [trigger] + cand[:-1]  → 로짓 T개가 cand[0..T-1]을 예측.
-    개입은 _IVX가 켜져 있으면 이 forward의 모든 query 위치(결정 지점 + teacher-forcing
-    step 전부)에 동일 적용된다(계획서 3.6).
+    seq = ids(프롬프트 전체, "def"까지) + cand. 위치 (len(ids)−1+i) 로짓이 cand[i]를 예측.
+    개입(_IVX)은 이 forward의 code/instr 위치에 그대로 적용된다(같은 forward라 마스킹 정확).
 
-    **주의:** prefix 길이(prefix_len)와 query 길이(T)가 달라, SDPA `is_causal`에 맡기면
-    좌상단 정렬 마스킹이 돼 후보가 prefix를 제대로 못 본다(→ 점수가 prefix에 무감각).
-    그래서 **명시적 attention_mask(1, prefix_len+T)를 넘겨** HF가 올바른 4D causal 마스크
-    (후보가 전체 prefix + 후보 내 causal)를 만들어 커스텀 forward에 전달하게 한다.
+    캐시 재사용 경로(past_key_values)는 query 길이≠key 길이에서 `is_causal`이 오정렬돼
+    후보가 prefix를 못 봤다(gap=0 원인). 정사각 full forward는 그 문제가 없다(V1로 검증됨).
     """
     import torch.nn.functional as F
-    cache = _make_cache(prefix_kv)
-    inp_list = [trigger_id] + cand_ids[:-1]
-    inp = torch.tensor([inp_list], dtype=torch.long, device=model.device)
-    T = len(cand_ids)
-    cache_pos = torch.arange(prefix_len, prefix_len + T, device=model.device)
-    pos_ids = cache_pos.unsqueeze(0)
-    attn_mask = torch.ones((1, prefix_len + T), dtype=torch.long, device=model.device)
+    seq = list(ids) + list(cand_ids)
+    inp = torch.tensor([seq], dtype=torch.long, device=model.device)
     with torch.no_grad():
-        out = model(input_ids=inp, past_key_values=cache, use_cache=True,
-                    position_ids=pos_ids, cache_position=cache_pos,
-                    attention_mask=attn_mask)
-    logits = out.logits[0]                        # (T, V)
+        out = model(input_ids=inp)
+    logits = out.logits[0]                        # (len(seq), V)
+    start = len(ids) - 1
     lp = 0.0
     for i, t in enumerate(cand_ids):
-        lp += float(F.log_softmax(logits[i].float(), dim=-1)[t].item())
+        lp += float(F.log_softmax(logits[start + i].float(), dim=-1)[t].item())
     return lp
 
 
-def pref_score(model, torch, prefix_kv, prefix_len, trigger_id, yc_ids, yv_ids):
+def pref_score(model, torch, ids, yc_ids, yv_ids):
     """준수 선호 점수 = (1/|Y_c|)logP(Y_c) − (1/|Y_v|)logP(Y_v). 같은 개입 아래 둘 다 채점."""
-    lpc = _logprob(model, torch, prefix_kv, prefix_len, trigger_id, yc_ids)
-    lpv = _logprob(model, torch, prefix_kv, prefix_len, trigger_id, yv_ids)
+    lpc = _logprob(model, torch, ids, yc_ids)
+    lpv = _logprob(model, torch, ids, yv_ids)
     return lpc / len(yc_ids) - lpv / len(yv_ids)
 
 
@@ -510,8 +490,7 @@ def prepare_session(model, tokenizer, torch, ctx_pair, decision, seed, companion
     if a["input_ids"][-1] != b["input_ids"][-1]:
         return None, "trigger_mismatch"
     ids = a["input_ids"]
-    prefix_len = len(ids) - 1
-    trigger_id = ids[-1]
+    prefix_len = len(ids) - 1        # "def"(trigger) 앞까지 — 코드/지침 구간은 이 안에 있음
 
     def clip(ps):
         return [p for p in ps if SINK <= p < prefix_len]
@@ -549,22 +528,21 @@ def prepare_session(model, tokenizer, torch, ctx_pair, decision, seed, companion
 
     return dict(
         ctx_pair=ctx_pair, seed=seed, n_ctx=len(companions) + 1,
-        prefix_len=prefix_len, trigger_id=trigger_id,
+        prefix_len=prefix_len,
+        ids_viol=b["input_ids"], ids_comp=a["input_ids"],   # 전체 프롬프트("def"까지) — full forward 채점용
         pos=pos, instr_pos=pos["instr"],
         yc_ids=yc, yv_ids=yv,
-        kv_viol=kv["snake"], kv_comp=kv["camel"],   # 손상(위반)·준수 prefix 캐시(불변, 재사용)
+        kv_viol=kv["snake"], kv_comp=kv["camel"],   # 코드 구간 donor 추출용 prefill 캐시
         n_diff=len(diff), n_layers=len(kv["snake"]),
         n_kv_heads=kv["snake"][0][0].shape[1],
     ), None
 
 
 def _score_baselines(model, torch, sess):
-    """개입 없는 두 baseline: 손상본(위반 prefix) / 준수본(준수 prefix)."""
+    """개입 없는 두 baseline: 손상본(위반 프롬프트) / 준수본(준수 프롬프트)."""
     iv_off()
-    damaged = pref_score(model, torch, sess["kv_viol"], sess["prefix_len"],
-                         sess["trigger_id"], sess["yc_ids"], sess["yv_ids"])
-    compliant = pref_score(model, torch, sess["kv_comp"], sess["prefix_len"],
-                           sess["trigger_id"], sess["yc_ids"], sess["yv_ids"])
+    damaged = pref_score(model, torch, sess["ids_viol"], sess["yc_ids"], sess["yv_ids"])
+    compliant = pref_score(model, torch, sess["ids_comp"], sess["yc_ids"], sess["yv_ids"])
     return damaged, compliant
 
 
@@ -696,16 +674,16 @@ def _configs_b(args, n_layers, n_kv_heads, n_q_heads):
                                  dict(pos="code", donor="comp", groups=[g], layers=[li])))
 
     if args.p2:
-        for lam in LAMBDAS:                                  # 전 층×전 head λ 곡선(단조성)
+        for lam in LAMBDAS:                                  # 전 층×전 head λ 곡선(단조성) — 기본
             cfgs.append((f"p2_all_lam{lam}", "p2",
                          dict(lam=lam, heads=None, layers=None, conserve=True)))
             cfgs.append((f"p2_all_lam{lam}_noncons", "p2",
                          dict(lam=lam, heads=None, layers=None, conserve=False)))
-        for li in layers_all:                                # 전 층 국소(층별 귀무)
-            for lam in LAMBDAS:
-                cfgs.append((f"p2_L{li}_lam{lam}", "p2",
-                             dict(lam=lam, heads=None, layers=[li], conserve=True)))
         if args.sweep:
+            for li in layers_all:                            # 전 층 국소(층별 귀무) — 스윕
+                for lam in LAMBDAS:
+                    cfgs.append((f"p2_L{li}_lam{lam}", "p2",
+                                 dict(lam=lam, heads=None, layers=[li], conserve=True)))
             # 층 × query head 28개 순회 — 후보 층에서.
             for li in [main] + aux:
                 for h in range(n_q_heads):
@@ -725,7 +703,7 @@ def _apply_config(torch, sess, kind, params):
     elif kind == "p2":
         iv_p2(sess["instr_pos"], params["lam"], heads=params.get("heads"),
               layers=params.get("layers"), conserve=params.get("conserve", True))
-    return sess["kv_viol"]
+    return sess["ids_viol"]      # 개입은 위반 프롬프트에 적용 → 이 시퀀스를 채점
 
 
 def run_b(args):
@@ -756,9 +734,8 @@ def run_b(args):
                 key = ("B", ckey, pi, seed, args.model)
                 if key in done:
                     continue
-                prefix_kv = _apply_config(torch, sess, kind, params)
-                s_iv = pref_score(model, torch, prefix_kv, sess["prefix_len"],
-                                  sess["trigger_id"], sess["yc_ids"], sess["yv_ids"])
+                ids_iv = _apply_config(torch, sess, kind, params)
+                s_iv = pref_score(model, torch, ids_iv, sess["yc_ids"], sess["yv_ids"])
                 iv_off()
                 append_jsonl(args.out, {
                     "design_version": DESIGN_VERSION, "model": args.model,
@@ -875,10 +852,9 @@ def run_validate(args):
     }
 
     # V2 — no-op 불변 (전 층 코드 구간, donor=self)
-    prefix_kv = _apply_config(torch, sess, "p1a",
-                              dict(pos="code", donor="self", groups=None, layers=None))
-    s_noop = pref_score(model, torch, prefix_kv, sess["prefix_len"],
-                        sess["trigger_id"], sess["yc_ids"], sess["yv_ids"])
+    ids_iv = _apply_config(torch, sess, "p1a",
+                           dict(pos="code", donor="self", groups=None, layers=None))
+    s_noop = pref_score(model, torch, ids_iv, sess["yc_ids"], sess["yv_ids"])
     iv_off()
     results["V2_noop_invariance"] = {
         "pass": abs(s_noop - damaged) < 1e-4,
@@ -886,10 +862,9 @@ def run_validate(args):
     }
 
     # V3 — 지침 patch ≈ 0 (지침 구간 K/V는 두 조건 비트 동일 → 이식해도 무변화)
-    prefix_kv = _apply_config(torch, sess, "p1a",
-                              dict(pos="instr", donor="comp", groups=None, layers=None))
-    s_instr = pref_score(model, torch, prefix_kv, sess["prefix_len"],
-                         sess["trigger_id"], sess["yc_ids"], sess["yv_ids"])
+    ids_iv = _apply_config(torch, sess, "p1a",
+                           dict(pos="instr", donor="comp", groups=None, layers=None))
+    s_instr = pref_score(model, torch, ids_iv, sess["yc_ids"], sess["yv_ids"])
     iv_off()
     results["V3_instr_patch_zero"] = {
         "pass": abs(s_instr - damaged) < 1e-3,
@@ -900,12 +875,10 @@ def run_validate(args):
     #   서로 다른 K/V를 L25에 넣으면 출력은 반드시 바뀐다 — 정확히 0이거나 NaN이면 배관 결함.
     #   기준: 유한 + |Δ| > 수치 바닥(1e-8). 작지만 0 아닌 실제 효과는 통과(효과 크기 판정 아님).
     import math
-    delta_main = s_main = None
-    prefix_kv = _apply_config(torch, sess, "p1a",
-                              dict(pos="code", donor="comp", groups=None,
-                                   layers=[args.main_layer]))
-    s_main = pref_score(model, torch, prefix_kv, sess["prefix_len"],
-                        sess["trigger_id"], sess["yc_ids"], sess["yv_ids"])
+    ids_iv = _apply_config(torch, sess, "p1a",
+                           dict(pos="code", donor="comp", groups=None,
+                                layers=[args.main_layer]))
+    s_main = pref_score(model, torch, ids_iv, sess["yc_ids"], sess["yv_ids"])
     iv_off()
     delta_main = s_main - damaged
     results["V7_mainlayer_moves"] = {
@@ -914,19 +887,17 @@ def run_validate(args):
         "note": "L25 코드 이식이 손상 대비 점수를 이동(유한·비영)시키는지. 부호·크기는 본실험 판정.",
     }
 
-    # V5 — P2 질량 보존 + V6 λ=1 항등
+    # V5 — P2 질량 보존 + V6 λ=1 항등 (위반 프롬프트에 P2 적용)
     iv_p2(sess["instr_pos"], lam=4.0, heads=None, layers=None, conserve=True)
     _IVX.assert_rowsum = True
-    s_p2 = pref_score(model, torch, sess["kv_viol"], sess["prefix_len"],
-                      sess["trigger_id"], sess["yc_ids"], sess["yv_ids"])
+    s_p2 = pref_score(model, torch, sess["ids_viol"], sess["yc_ids"], sess["yv_ids"])
     rowsum_err = _IVX.last_rowsum_err
     iv_off()
     results["V5_p2_mass_conserved"] = {
         "pass": rowsum_err < 1e-4, "max_rowsum_err": rowsum_err,
     }
     iv_p2(sess["instr_pos"], lam=1.0, heads=None, layers=None, conserve=True)
-    s_p2_id = pref_score(model, torch, sess["kv_viol"], sess["prefix_len"],
-                         sess["trigger_id"], sess["yc_ids"], sess["yv_ids"])
+    s_p2_id = pref_score(model, torch, sess["ids_viol"], sess["yc_ids"], sess["yv_ids"])
     iv_off()
     results["V6_lambda1_identity"] = {
         "pass": abs(s_p2_id - damaged) < 1e-3, "abs_diff": abs(s_p2_id - damaged),
