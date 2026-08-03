@@ -340,6 +340,21 @@ def run_session(model, tokenizer, instruction, violation_count, seed, args, torc
     }
 
 
+def _pos_stats(sessions, position):
+    """해당 위치의 (판정가능 세션수, 준수 세션수, 전체 세션수).
+
+    generated_name이 None(이름 추출 실패)인 세션은 '판정불가'로 분모에서 제외한다.
+    즉 '위반'과 '판정불가'를 섞지 않는다.
+    """
+    total = len(sessions)
+    judge = []
+    for s in sessions:
+        f = next((x for x in s.get("functions", []) if x["position"] == position), None)
+        if f is not None and f.get("generated_name") is not None:
+            judge.append(bool(f["compliant"]))
+    return len(judge), sum(judge), total
+
+
 def print_summary(out_path, instructions, violations):
     if not os.path.exists(out_path):
         return
@@ -361,34 +376,48 @@ def print_summary(out_path, instructions, violations):
     if len(models) > 1:
         print(f"주의: 여러 모델이 섞여 있음 {models} — 아래 표는 합산이다.")
 
-    # (instruction, V) → 위치1 준수 리스트
+    # (instruction, V) → 세션 레코드 리스트
     cell = {}
     for r in rows:
-        k = (r["instruction"], r["violation_count"])
-        cell.setdefault(k, []).append(r["position1_compliant"])
+        cell.setdefault((r["instruction"], r["violation_count"]), []).append(r)
 
     print(f"\n=== 실험1 파일럿 요약 [{DESIGN_VERSION}] "
           f"{'/'.join(models)}, python camelCase / 위치1 준수율 ===")
-    print("행=지침강도, 열=Vk(prefix 내 snake 함수 수). 값 = 첫 함수 camelCase 준수율%(세션수)\n")
+    print("행=지침강도, 열=Vk(prefix 내 snake 함수 수).")
+    print("값 = 위치1 camelCase 준수율%(판정가능 세션수). ?k = 이름 추출 실패(판정불가) k개\n")
     header = "  {:8s}".format("지침")
     for v in violations:
-        header += "  {:^9s}".format(f"V{v}")
+        header += "  {:^11s}".format(f"V{v}")
     print(header + "  | 해석")
 
     for instr in instructions:
         line = "  {:8s}".format(instr)
         rates = []
         for v in violations:
-            vals = cell.get((instr, v))
-            if vals:
-                rate = sum(vals) / len(vals) * 100
+            nj, nc, nt = _pos_stats(cell.get((instr, v), []), 1)
+            if nj:
+                rate = nc / nj * 100
                 rates.append(rate)
-                line += "  {:>4.0f}%(n{:d})".format(rate, len(vals))
+                s = "{:>3.0f}%(n{:d})".format(rate, nj)
+                if nj < nt:
+                    s += "?{:d}".format(nt - nj)  # 판정불가 개수
+                line += "  {:^11s}".format(s)
             else:
                 rates.append(None)
-                line += "  {:^9s}".format("--")
-        # 해석: V가 커질수록 단조 감소하면 효과 O
+                line += "  {:^11s}".format("판정불가" if cell.get((instr, v)) else "--")
         print(line + f"  | {_interpret(rates)}")
+
+    # 보조 — 위치별 준수율 (연쇄효과): 위치1이 흔들리거나 판정불가일 때 뒤(2·3)는 어땠나
+    print("\n[보조] 위치별 준수율 (판정가능 분모 / 연쇄효과):")
+    for instr in instructions:
+        for pos in (1, 2, 3):
+            line = "  {:8s} 위치{:d}".format(instr if pos == 1 else "", pos)
+            for v in violations:
+                nj, nc, _ = _pos_stats(cell.get((instr, v), []), pos)
+                line += "  {:^11s}".format(
+                    "{:>3.0f}%(n{:d})".format(nc / nj * 100, nj) if nj else "--")
+            print(line)
+        print()
 
 
 def _interpret(rates):
@@ -408,6 +437,70 @@ def _interpret(rates):
     return "효과 미미"
 
 
+def _load_rows(out_path):
+    """현재 DESIGN_VERSION 레코드만 로드."""
+    rows = []
+    if not os.path.exists(out_path):
+        return rows
+    with open(out_path) as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            r = json.loads(line)
+            if r.get("design_version") == DESIGN_VERSION:
+                rows.append(r)
+    return rows
+
+
+def _f_at(session, position):
+    return next((x for x in session.get("functions", []) if x["position"] == position), None)
+
+
+def print_chain(out_path, instructions, violations):
+    """조건부 연쇄효과: 위치1이 O였던 세션 vs X였던 세션에서 위치2·3 준수율.
+
+    '첫 함수가 규칙을 어기면(스스로 snake를 뱉으면) 그게 다시 context에 쌓여
+    뒤 함수도 따라 어기는가(자기 증폭)'를 직접 본다.
+    """
+    rows = _load_rows(out_path)
+    if not rows:
+        print(f"(design_version={DESIGN_VERSION} 레코드 없음: {out_path})")
+        return
+    cell = {}
+    for r in rows:
+        cell.setdefault((r["instruction"], r["violation_count"]), []).append(r)
+
+    def rate(grp, pos):
+        vals = [_f_at(s, pos)["compliant"] for s in grp
+                if _f_at(s, pos) and _f_at(s, pos).get("generated_name") is not None]
+        return (sum(vals) / len(vals) * 100, len(vals)) if vals else (None, 0)
+
+    print("\n=== 연쇄효과: 위치1 결과에 따른 위치2·3 준수율 (판정가능만) ===")
+    print("위치1을 O/X로 나눠, 뒤따르는 위치2·3의 camelCase 준수율을 본다.")
+    print("(위치1=X 그룹에서 위치2·3도 낮으면 → 첫 위반이 자기 증폭한다는 신호)\n")
+    for instr in instructions:
+        for v in violations:
+            sessions = cell.get((instr, v), [])
+            o_grp, x_grp = [], []
+            for s in sessions:
+                f1 = _f_at(s, 1)
+                if not f1 or f1.get("generated_name") is None:
+                    continue
+                (o_grp if f1["compliant"] else x_grp).append(s)
+            if not o_grp and not x_grp:
+                continue
+            print(f"  [{instr} V{v}]")
+            for label, grp in [("위치1=O", o_grp), ("위치1=X", x_grp)]:
+                if not grp:
+                    continue
+                (r2, n2), (r3, n3) = rate(grp, 2), rate(grp, 3)
+                r2s = f"{r2:.0f}%(n{n2})" if r2 is not None else "--"
+                r3s = f"{r3:.0f}%(n{n3})" if r3 is not None else "--"
+                print(f"    {label} (세션 n{len(grp)}) → 위치2 {r2s}, 위치3 {r3s}")
+            print()
+
+
 def main():
     ap = argparse.ArgumentParser(description="실험1 축소 파일럿 (3B, 지침강도×위반개수)")
     ap.add_argument("--model", default=DEFAULT_MODEL)
@@ -422,6 +515,8 @@ def main():
     ap.add_argument("--top-p", type=float, default=0.95)
     ap.add_argument("--out", default=DEFAULT_OUT)
     ap.add_argument("--summary-only", action="store_true")
+    ap.add_argument("--chain", action="store_true",
+                    help="위치1 O/X에 따른 위치2·3 조건부 연쇄효과도 출력")
     args = ap.parse_args()
 
     os.makedirs(RESULTS_DIR, exist_ok=True)
@@ -432,6 +527,8 @@ def main():
 
     if args.summary_only:
         print_summary(args.out, args.instructions, args.violations)
+        if args.chain:
+            print_chain(args.out, args.instructions, args.violations)
         return
 
     import torch
@@ -453,6 +550,8 @@ def main():
     print(f"완료 {len(done)}개, 남은 {len(pending)}개 세션")
     if not pending:
         print_summary(args.out, args.instructions, args.violations)
+        if args.chain:
+            print_chain(args.out, args.instructions, args.violations)
         return
 
     print(f"[{args.model}] 로드 중...")
@@ -470,6 +569,8 @@ def main():
         print(f"위치1 {'O' if rec['position1_compliant'] else 'X'} ({rec['position1_name']})")
 
     print_summary(args.out, args.instructions, args.violations)
+    if args.chain:
+        print_chain(args.out, args.instructions, args.violations)
 
 
 if __name__ == "__main__":
