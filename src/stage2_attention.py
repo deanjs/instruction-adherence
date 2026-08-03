@@ -1133,7 +1133,7 @@ def _decomp(rec, metric):
     return (dA + dB) / 2, (dA - dB) / 2  # (토큰-identity, 위반-상태)
 
 
-def print_content2x2_summary(out_path):
+def print_content2x2_summary(out_path, n_boot=2000, top_layers=8):
     rows = []
     if os.path.exists(out_path):
         with open(out_path) as f:
@@ -1179,23 +1179,99 @@ def print_content2x2_summary(out_path):
             continue
         mt, st, _ = clustered(tok)
         mv, sv, k = clustered(viol)
-        print(f"  [{label}]  (이름쌍 {k} clustered)")
-        tt = f"{mt/st:+.1f}" if st else "--"
-        vt = f"{mv/sv:+.1f}" if sv else "--"
-        print(f"     토큰-identity Δ = {mt:+.5f}  (SE {st or 0:.5f}, t≈{tt})")
-        print(f"     위반-상태    Δ = {mv:+.5f}  (SE {sv or 0:.5f}, t≈{vt})")
-        verdict = ("위반-상태 효과 있음(지침과 충돌하는 이름을 더 봄)"
-                   if sv and abs(mv / sv) >= 2 and mv > 0
-                   else "위반-상태 효과 뚜렷하지 않음 → 대부분 snake-토큰 특성")
+        # 이름쌍·문맥 seed 모두 고려한 cluster bootstrap 95% CI
+        tok_ci = _cluster_bootstrap(rows, metric, "token", n_boot)
+        viol_ci = _cluster_bootstrap(rows, metric, "viol", n_boot)
+        print(f"  [{label}]  (이름쌍 {k} clustered, bootstrap {n_boot}회)")
+        print(f"     토큰-identity Δ = {mt:+.5f}  95%CI [{tok_ci[0]:+.5f}, {tok_ci[1]:+.5f}]")
+        print(f"     위반-상태    Δ = {mv:+.5f}  95%CI [{viol_ci[0]:+.5f}, {viol_ci[1]:+.5f}]")
+        excl0 = viol_ci[0] > 0 or viol_ci[1] < 0
+        verdict = ("위반-상태 효과 있음 (CI가 0 제외, 지침과 충돌하는 이름을 더 봄)"
+                   if excl0 and mv > 0
+                   else "위반-상태 효과 CI가 0 포함 → 미확정")
         print(f"     → {verdict}\n")
-    print("  ※ t는 이름쌍 clustered 기술값 — 문맥 seed 확대·bootstrap으로 확정 필요.")
-    print("  ※ 위반-상태 Δ>0 유의 = attention이 '위반이라서' 높아진다는 첫 분리 증거(상관).")
+    print("  ※ CI는 이름쌍·문맥 seed cluster bootstrap. 위반-상태 CI가 0을 제외하면 파일럿 신호 재현.")
+    print("  ※ '위반 상태 → attention'은 입력 조작 효과. 'attention → 위반 출력'은 3단계에서.")
+
+    # 층별 split-half (개입 후보 층 선정)
+    if any("attn_by_layer" in r for r in rows) and len({r["seed"] for r in rows}) >= 2:
+        print_content2x2_layers_splithalf(rows, top_layers)
+
+
+def _cluster_bootstrap(rows, metric, comp, n_boot, boot_seed=12345):
+    """이름쌍을 cluster로 재표집한 bootstrap 95% CI. comp ∈ {token, viol}.
+    한 이름쌍의 여러 문맥 seed 관측은 비독립이므로 이름쌍 단위로 재표집한다."""
+    idx = 0 if comp == "token" else 1
+    byp = {}
+    for r in rows:
+        d = _decomp(r, metric)
+        if d is None:
+            continue
+        byp.setdefault(r["pair_idx"], []).append(d[idx])
+    pairs = list(byp)
+    if len(pairs) < 2:
+        return (float("nan"), float("nan"))
+    rng = random.Random(boot_seed)
+    boots = []
+    for _ in range(n_boot):
+        pm = []
+        for _ in range(len(pairs)):
+            vs = byp[pairs[rng.randrange(len(pairs))]]      # 이름쌍 재표집
+            pm.append(sum(vs) / len(vs))                    # 그 이름쌍의 seed 평균
+        boots.append(sum(pm) / len(pm))
+    boots.sort()
+    return (boots[int(0.025 * n_boot)], boots[min(int(0.975 * n_boot), n_boot - 1)])
+
+
+def print_content2x2_layers_splithalf(rows, top_k):
+    """seed 절반으로 후보 층 탐색 + 나머지 절반으로 재현 확인. 재현 층만 개입 후보."""
+    seeds = sorted({r["seed"] for r in rows})
+    half = len(seeds) // 2
+    disc, conf = set(seeds[:half]), set(seeds[half:])
+
+    def layer_viol(subset):
+        per = {}
+        for r in rows:
+            if r["seed"] not in subset:
+                continue
+            a = r.get("attn_by_layer", {}).get("camel_instr", {})
+            b = r.get("attn_by_layer", {}).get("snake_instr", {})
+            ca, sa, cb, sb = a.get("camel", {}), a.get("snake", {}), b.get("camel", {}), b.get("snake", {})
+            for L in set(ca) & set(sa) & set(cb) & set(sb):
+                dA, dB = sa[L] - ca[L], sb[L] - cb[L]
+                per.setdefault(int(L), []).append((r["pair_idx"], (dA - dB) / 2))
+        out = {}
+        for L, pv in per.items():
+            byp = {}
+            for p, v in pv:
+                byp.setdefault(p, []).append(v)
+            pm = [sum(x) / len(x) for x in byp.values()]
+            out[L] = sum(pm) / len(pm)
+        return out
+
+    if not disc or not conf:
+        print("\n  --- 층 split-half: seed가 부족(≥2 필요) ---")
+        return
+    d, c = layer_viol(disc), layer_viol(conf)
+    top = sorted(d, key=lambda L: abs(d[L]), reverse=True)[:top_k]
+    print(f"\n  --- 층 split-half (탐색 seed {len(disc)} / 재현 seed {len(conf)}) — 위반-상태 Δ, raw attention ---")
+    print(f"    {'층':>4} {'탐색Δ':>10} {'재현Δ':>10} {'재현?':>6}")
+    repro = []
+    for L in top:
+        cv = c.get(L)
+        ok = cv is not None and (d[L] > 0) == (cv > 0) and cv > 0
+        if ok:
+            repro.append(L)
+        print(f"    L{L:<3d} {d[L]:+10.5f} {cv if cv is not None else float('nan'):+10.5f} "
+              f"{'✅' if ok else '—':>6}")
+    print(f"    → 재현된 개입 후보 층: {repro if repro else '없음'} "
+          f"(탐색에서 크고 재현에서도 같은 방향·양수인 층만)")
 
 
 def run_content2x2(args):
     os.makedirs(os.path.dirname(os.path.abspath(args.out)), exist_ok=True)
     if args.summary_only:
-        print_content2x2_summary(args.out)
+        print_content2x2_summary(args.out, args.n_boot, args.top_layers)
         return
 
     import torch
@@ -1228,11 +1304,12 @@ def run_content2x2(args):
     print(f"pair {len(pairs)} × seed {len(seeds)} = {len(pairs)*len(seeds)} 대응 관측 "
           f"(관측당 4 forward), 남은 {len(pending)}")
     if not pending:
-        print_content2x2_summary(args.out)
+        print_content2x2_summary(args.out, args.n_boot, args.top_layers)
         return
 
     print(f"[{model_id}] 로드 중 (attn_implementation={ATTN_NAME}, fp16)...")
     tokenizer = AutoTokenizer.from_pretrained(model_id)
+    check_instruction_correspondence(tokenizer)      # 지침 대응 점검(절차 1)
     model = AutoModelForCausalLM.from_pretrained(
         model_id, torch_dtype=torch.float16, device_map="auto",
         attn_implementation=ATTN_NAME).eval()
@@ -1246,7 +1323,76 @@ def run_content2x2(args):
         append_jsonl(args.out, rec)
         n_ok += 1
     print(f"기록 {n_ok}. 정렬 폐기: {skip or '없음'}")
-    print_content2x2_summary(args.out)
+    print_content2x2_summary(args.out, args.n_boot, args.top_layers)
+
+
+def check_instruction_correspondence(tokenizer):
+    """절차 1: 두 지침 문장이 강도·토큰 수·위치에서 대응하는지 점검. rule 토큰 수가
+    다르면 지침 조건 간 프롬프트가 어긋나므로 경고한다(2×2 셀 내 정렬은 그대로 유지되나,
+    조건 간 위치 대응을 위해 맞추는 게 좋다)."""
+    print("  [절차 1 · 지침 대응 점검]")
+    lens = {}
+    for style in ("camel", "snake"):
+        rule_ids = tokenizer(INSTR_RULE[style], add_special_tokens=False)["input_ids"]
+        sys_ids = tokenizer(_content_system(style), add_special_tokens=False)["input_ids"]
+        lens[style] = (len(rule_ids), len(sys_ids))
+        print(f"    {style:5}: rule '{INSTR_RULE[style]}' = {len(rule_ids)}tok, system 전체 {len(sys_ids)}tok")
+    same = lens["camel"][0] == lens["snake"][0]
+    print(f"    → rule 토큰 수 {'일치 ✅ (강도·위치 대응 OK)' if same else '불일치 ⚠️ — 문구를 토큰 수 맞게 조정 권장'}")
+    return same
+
+
+def run_check_instr(args):
+    from transformers import AutoTokenizer
+    tok = AutoTokenizer.from_pretrained(args.model or OBSERVE_MODEL)
+    check_instruction_correspondence(tok)
+
+
+def run_behcheck(args):
+    """절차 2: snake_case 지침도 모델이 실제로 이해·준수하는지 행동 점검.
+    지침 준수(camelCase→camel, snake_case→snake)율이 낮으면 그 조건의 '위반'이 성립 안 함."""
+    import torch
+    from transformers import AutoModelForCausalLM, AutoTokenizer
+    from step1_baseline import extract_name, is_compliant, FUNCTION_SPECS
+
+    model_id = args.model or OBSERVE_MODEL
+    if not torch.cuda.is_available():
+        sys.exit("CUDA 없음 — Colab을 GPU 런타임(T4)으로 바꿔라.")
+    tokenizer = AutoTokenizer.from_pretrained(model_id)
+    check_instruction_correspondence(tokenizer)
+    model = AutoModelForCausalLM.from_pretrained(
+        model_id, torch_dtype=torch.float16, device_map="auto").eval()
+
+    specs = FUNCTION_SPECS[: args.beh_n]
+    print(f"\n  [절차 2 · 행동 점검] 지침별 준수율 (n={len(specs)} 함수, greedy)")
+    for instr in ("camel", "snake"):
+        pool = [f[instr] for f in PREFIX_FUNCS]
+        order = random.Random(args.base_seed).sample(range(len(pool)), min(args.n_filler, len(pool)))
+        prefix = "\n\n\n".join(pool[i] for i in order)      # 지침 준수 filler
+        ok, tot, names = 0, 0, []
+        for spec in specs:
+            messages = [
+                {"role": "system", "content": _content_system(instr)},
+                {"role": "user", "content": ("Here is the existing code in this project:\n\n"
+                                             f"```python\n{prefix}\n```\n\n"
+                                             f"Now add a function that {spec['desc']}.")},
+            ]
+            pt = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+            inputs = tokenizer(pt, return_tensors="pt", add_special_tokens=False).to(model.device)
+            with torch.no_grad():
+                out = model.generate(**inputs, max_new_tokens=64, do_sample=False,
+                                     pad_token_id=tokenizer.eos_token_id)
+            gen = tokenizer.decode(out[0][inputs["input_ids"].shape[1]:], skip_special_tokens=True)
+            name, parse_ok = extract_name("python", gen)
+            if name:
+                tot += 1
+                if is_compliant(name, instr):
+                    ok += 1
+                names.append(name)
+        rate = ok / tot * 100 if tot else 0.0
+        flag = "✅ 지침 이해·준수" if rate >= 55 else "⚠️ 준수율 낮음 — 이 조건의 '위반' 해석 주의"
+        print(f"    {instr:5} 지침: 준수 {ok}/{tot} = {rate:.0f}%  {flag}   예: {names[:4]}")
+    print("  ※ 두 지침 모두 준수율이 상당해야 2×2의 '위반 상태'가 양쪽에서 성립한다.")
 
 
 # ─────────────────────────────────────────────────────────────
@@ -1261,6 +1407,10 @@ def main():
                       help="내용-분리 측정: matched pair로 위치·길이 고정, 이름만 snake↔camel")
     mode.add_argument("--content2x2", action="store_true",
                       help="지침 뒤집기 2×2: snake-토큰 특성 vs 지침 위반 상태 분리")
+    mode.add_argument("--check-instr", action="store_true",
+                      help="절차 1: 두 지침 문장의 토큰 수·대응 점검(토크나이저만)")
+    mode.add_argument("--behcheck", action="store_true",
+                      help="절차 2: 지침별 준수율 행동 점검(snake_case도 따르는지)")
 
     ap.add_argument("--model", default=None, help="기본: 관측·내용=3B, 검증=1.5B")
     # 관측
@@ -1287,6 +1437,8 @@ def main():
     ap.add_argument("--n-filler", type=int, default=8, help="target 주변 filler 함수 수")
     ap.add_argument("--all-pairs", action="store_true",
                     help="단일 토큰 분기 pair만이 아니라 전체 matched pair 사용")
+    ap.add_argument("--n-boot", type=int, default=2000, help="2×2 cluster bootstrap 반복 수")
+    ap.add_argument("--beh-n", type=int, default=10, help="행동 점검(--behcheck) 함수 수")
     # 검증
     ap.add_argument("--dtype", choices=["float16", "float32"], default="float32",
                     help="검증 정밀도. fp32면 tight tolerance")
@@ -1299,6 +1451,10 @@ def main():
                     DEFAULT_CONTENT_OUT if args.content else DEFAULT_OUT)
     if args.validate:
         run_validate(args)
+    elif args.check_instr:
+        run_check_instr(args)
+    elif args.behcheck:
+        run_behcheck(args)
     elif args.content2x2:
         run_content2x2(args)
     elif args.content:
