@@ -52,9 +52,21 @@ NIAR = (지침 구간 attention 합 ÷ 지침 토큰 수) ÷ (전체 attention �
 
 ---
 
+## 실행
+
+- 하네스: [`src/stage2_attention.py`](../../src/stage2_attention.py)
+  - `--validate` — 512토큰 eager 대조 검증(계획서 3.4). **관측의 게이트.**
+  - `--observe` — exp1 조건(compliant_remaining)·seed를 그대로 재사용해 NIAR/NSCAR/NVCAR 관측.
+- Colab 진입점: [`notebooks/stage2_colab.ipynb`](../../notebooks/stage2_colab.ipynb) (검증 → 관측 → 집계).
+- 관측 결과: `results/stage2_niar.jsonl` (세션 단위 append, `(model, condition, seed)`로 재개).
+- 구현 메모:
+  - `AttentionInterface`에 query 길이 분기 함수 등록 — prefill은 SDPA 위임, decode만 명시적 softmax → 구간별 즉시 축약. GQA `repeat_kv` 처리.
+  - 관측 context는 exp1_main의 `build_prefix`/`system_prompt`를 그대로 import(정본과 assert로 대조) → 행동↔관측 조건 동일성 보장.
+  - attention sink 앞 `SINK=4` 토큰은 구간·분모 양쪽에서 제외.
+
 ## 결과
 
-*(미실행 — 실행 후 채운다.)*
+*(미실행 — Colab에서 `--validate` PASS 후 `--observe` 실행하고 채운다.)*
 
 - NIAR / NSCAR / NVCAR 조건별 분포:
 - 동일 길이 구간 대조:
