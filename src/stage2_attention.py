@@ -81,6 +81,7 @@ class _Ctx:
         self.seg_ntok = {}        # {seg_name: 토큰 수}
         self.prompt_len = 0
         self.value_norm = False
+        self.capture_prefill_last = False  # prefill 마지막 query 행도 캡처(naming step 측정용)
         self.records = []         # [{layer, kv_len, total_kept, seg{...}, seg_vnorm{...}}]
         self._pos_cache = {}      # device별 index tensor 캐시
 
@@ -88,7 +89,7 @@ class _Ctx:
 _CTX = _Ctx()
 
 
-def ctx_begin(seg_positions, prompt_len, value_norm):
+def ctx_begin(seg_positions, prompt_len, value_norm, capture_prefill_last=False):
     _CTX.reset()
     # sink 제외 + prompt 영역 안으로 클리핑
     _CTX.seg_positions = {
@@ -98,6 +99,7 @@ def ctx_begin(seg_positions, prompt_len, value_norm):
     _CTX.seg_ntok = {name: len(pos) for name, pos in _CTX.seg_positions.items()}
     _CTX.prompt_len = prompt_len
     _CTX.value_norm = value_norm
+    _CTX.capture_prefill_last = capture_prefill_last
     _CTX.enabled = True
 
 
@@ -175,6 +177,20 @@ def niar_attention_forward(module, query, key, value, attention_mask,
         mask = None
         if attention_mask is not None:
             mask = attention_mask[:, :, :, : key_states.shape[-2]]
+        # naming step 측정: 마지막 query 행(= 다음 토큰을 예측하는 위치)만 명시적으로 축약.
+        # 한 행뿐이라 메모리 폭증 없음. 첫 생성 토큰(이름)의 참조를 잡는다.
+        if _CTX.enabled and _CTX.capture_prefill_last:
+            q_last = query[:, :, -1:, :]                                   # (b,H,1,d)
+            s = torch.matmul(q_last, key_states.transpose(2, 3)) * scaling  # (b,H,1,kv)
+            if attention_mask is not None:
+                s = s + attention_mask[:, :, -1:, : key_states.shape[-2]]
+            p = F.softmax(s, dim=-1, dtype=torch.float32).to(query.dtype)
+            row = p[0, :, 0, :]                                             # (H, kv)
+            vrow = value_states[0] if _CTX.value_norm else None            # (H, kv, d)
+            rec = reduce_attn_row(torch, row, _pos_tensors(torch, p.device), vrow)
+            rec["layer"] = int(getattr(module, "layer_idx", -1))
+            rec["step"] = 0                                                 # naming step
+            _CTX.records.append(rec)
         attn_output = F.scaled_dot_product_attention(
             query, key_states, value_states,
             attn_mask=mask,
@@ -196,6 +212,7 @@ def niar_attention_forward(module, query, key, value, attention_mask,
         vrow = value_states[0] if _CTX.value_norm else None  # (H, kv, d)
         rec = reduce_attn_row(torch, row, _pos_tensors(torch, probs.device), vrow)
         rec["layer"] = int(getattr(module, "layer_idx", -1))
+        rec["step"] = int(rec["kv_len"] - _CTX.prompt_len)   # 1,2,... (첫 decode=1)
         _CTX.records.append(rec)                             # 축약값만 저장
 
     return attn_output, probs
@@ -699,6 +716,247 @@ def run_observe(args):
 
 
 # ─────────────────────────────────────────────────────────────
+# 내용-분리 측정 (--content) — 2단계를 깨끗이 닫는 대조
+#
+# 관측(--observe)의 위반 코드 gradient는 조건마다 위반 '구간 크기'가 달라져 생긴 교란이었다.
+# 여기선 Step 0의 토큰 수 일치 pair(matched_pairs.json)로 **같은 위치·같은 길이**에서
+# 이름만 camel↔snake로 바꿔, 순수 '내용' 효과만 본다(계획서 3.7 보조 검증).
+#   - 측정 순간 = naming step: prompt를 "```python\ndef "까지 주고, 다음 토큰(=이름)을
+#     예측하는 위치(prefill 마지막 행)의 attention을 target 이름 토큰에 대해 잰다.
+#   - 길이가 같으니 정규화 불필요 → raw attention 합을 직접 비교. ‖α·v‖도 함께.
+#   - 대응: 같은 seed·같은 filler 배치에서 camel/snake만 교체(pair 내 대응).
+# ─────────────────────────────────────────────────────────────
+
+DESIGN_VERSION_CONTENT = "stage2_content_v1"
+DEFAULT_CONTENT_OUT = os.path.join(RESULTS_DIR, "stage2_content.jsonl")
+PAIRS_PATH = os.path.join(RESULTS_DIR, "matched_pairs.json")
+
+# target 함수 본문(고정). 이름만 pair로 갈아끼운다. camelCase가 규칙(=snake가 위반).
+TARGET_BODY = "def {name}(value):\n    return _process(value)"
+
+
+def _load_pairs(single_token_only):
+    with open(PAIRS_PATH) as f:
+        pairs = json.load(f)
+    if single_token_only:
+        pairs = [p for p in pairs if p.get("single_token_divergence")]
+    return pairs
+
+
+def build_content_prefix(pair, style, seed, n_filler):
+    """filler(camel, 고정) 사이 가운데 슬롯에 target 함수를 넣는다. style로 이름만 교체.
+
+    반환: (prefix 문자열, target 함수 문자열).
+    filler는 exp1 PREFIX_FUNCS의 camel 본문 재사용(준수=camel 맥락).
+    """
+    name = pair[style]                              # "camel" or "snake"
+    target = TARGET_BODY.format(name=name)
+    pool = [f["camel"] for f in PREFIX_FUNCS]
+    order = random.Random(seed).sample(range(len(pool)), min(n_filler, len(pool)))
+    fillers = [pool[i] for i in order]
+    slot = len(fillers) // 2                         # 가운데
+    parts = fillers[:slot] + [target] + fillers[slot:]
+    return "\n\n\n".join(parts), target
+
+
+def content_session(model, tokenizer, torch, pair, pair_idx, seed, args):
+    """한 pair·seed에서 camel/snake 두 조건의 naming-step attention을 target에 대해 측정."""
+    spec_desc = "formats a value for display"       # 새로 만들 함수(고정 작업 지시)
+
+    per_style = {}
+    align = None
+    for style in ("camel", "snake"):
+        prefix, target = build_content_prefix(pair, style, seed, args.n_filler)
+        messages = [
+            {"role": "system", "content": system_prompt()},
+            {"role": "user", "content": ("Here is the existing code in this project:\n\n"
+                                         f"```python\n{prefix}\n```\n\n"
+                                         f"Now add a function that {spec_desc}.")},
+        ]
+        prompt_text = tokenizer.apply_chat_template(
+            messages, tokenize=False, add_generation_prompt=True)
+        prompt_text += "```python\ndef "               # naming step 바로 앞까지 프라이밍
+
+        enc = tokenizer(prompt_text, return_offsets_mapping=True, add_special_tokens=False)
+        offsets, input_ids = enc["offset_mapping"], enc["input_ids"]
+        prompt_len = len(input_ids)
+
+        # target 함수·이름 토큰 위치
+        ct = prompt_text.find(target)
+        name = pair[style]
+        cn = prompt_text.find(name, ct)
+        seg = {
+            "target_func": _char_span_to_tokens(offsets, ct, ct + len(target)),
+            "target_name": _char_span_to_tokens(offsets, cn, cn + len(name)),
+        }
+        per_style[style] = dict(input_ids=input_ids, prompt_len=prompt_len, seg=seg,
+                                prompt_text=prompt_text)
+
+    # ── 정렬 검증: 두 조건의 토큰열이 이름 토큰(들)만 빼고 완전히 같아야 위치·길이 고정 ──
+    a, b = per_style["camel"], per_style["snake"]
+    if len(a["input_ids"]) != len(b["input_ids"]):
+        return None, "len_mismatch"
+    diff = [i for i, (x, y) in enumerate(zip(a["input_ids"], b["input_ids"])) if x != y]
+    name_pos = set(a["seg"]["target_name"])
+    if a["seg"]["target_name"] != b["seg"]["target_name"] or set(diff) - name_pos:
+        return None, "align_fail"                    # 이름 위치 밖에서 토큰이 달라짐 → 폐기
+    align = {"n_diff": len(diff), "name_tok": a["seg"]["target_name"]}
+
+    # ── 두 조건 각각 단일 forward(prefill)로 naming-step attention 캡처 ──
+    out = {}
+    for style in ("camel", "snake"):
+        st = per_style[style]
+        inputs = tokenizer(st["prompt_text"], return_tensors="pt",
+                           add_special_tokens=False).to(model.device)
+        ctx_begin(st["seg"], st["prompt_len"], value_norm=True, capture_prefill_last=True)
+        with torch.no_grad():
+            model(**inputs)                          # 생성 없이 1회 forward
+        out[style] = ctx_end()
+
+    def by_layer(recs, seg, field):
+        return {r["layer"]: r[field].get(seg) for r in recs if seg in r[field]}
+
+    cam_name = by_layer(out["camel"], "target_name", "seg")
+    sna_name = by_layer(out["snake"], "target_name", "seg")
+    cam_vn = by_layer(out["camel"], "target_name", "seg_vnorm")
+    sna_vn = by_layer(out["snake"], "target_name", "seg_vnorm")
+    layers = sorted(cam_name)
+
+    def mean(d):
+        vs = [v for v in d.values() if v is not None]
+        return sum(vs) / len(vs) if vs else None
+
+    return {
+        "design_version": DESIGN_VERSION_CONTENT,
+        "model": model.name_or_path,
+        "pair_idx": pair_idx,
+        "camel": pair["camel"], "snake": pair["snake"],
+        "total_tokens": pair.get("total_tokens"),
+        "seed": seed,
+        "n_filler": args.n_filler,
+        "align": align,
+        # naming step, target 이름 토큰에 대한 raw attention(head 평균) — 길이 동일이라 비정규화
+        "attn_name": {"camel": mean(cam_name), "snake": mean(sna_name)},
+        "attn_name_by_layer": {"camel": cam_name, "snake": sna_name},
+        # 보완 지표 ‖α·v‖ (Kobayashi 2020)
+        "vnorm_name": {"camel": mean(cam_vn), "snake": mean(sna_vn)},
+        "vnorm_name_by_layer": {"camel": cam_vn, "snake": sna_vn},
+    }, None
+
+
+def print_content_summary(out_path):
+    rows = []
+    if os.path.exists(out_path):
+        with open(out_path) as f:
+            for line in f:
+                line = line.strip()
+                if line:
+                    r = json.loads(line)
+                    if r.get("design_version") == DESIGN_VERSION_CONTENT:
+                        rows.append(r)
+    if not rows:
+        print(f"(design_version={DESIGN_VERSION_CONTENT} 레코드 없음: {out_path})")
+        return
+
+    def paired(rows, metric):
+        d = []
+        for r in rows:
+            c, s = r[metric]["camel"], r[metric]["snake"]
+            if c is not None and s is not None:
+                d.append(s - c)                       # snake(위반) − camel(준수)
+        return d
+
+    def stat(xs):
+        if not xs:
+            return None
+        m = sum(xs) / len(xs)
+        var = sum((x - m) ** 2 for x in xs) / len(xs)
+        se = (var / len(xs)) ** 0.5
+        return m, se, len(xs)
+
+    print(f"\n=== 2단계 내용-분리 측정 [{DESIGN_VERSION_CONTENT}] "
+          f"/ 같은 위치·같은 길이, 이름만 snake↔camel ===")
+    print("naming step에서 target 이름 토큰에 준 attention. Δ = snake(위반) − camel(준수).\n")
+    for metric, label in [("attn_name", "raw attention"),
+                          ("vnorm_name", "‖α·v‖ (Kobayashi)")]:
+        d = paired(rows, metric)
+        st = stat(d)
+        if st is None:
+            print(f"  {label:<20}: (데이터 없음)")
+            continue
+        m, se, n = st
+        cam = [r[metric]["camel"] for r in rows if r[metric]["camel"] is not None]
+        sna = [r[metric]["snake"] for r in rows if r[metric]["snake"] is not None]
+        z = m / se if se > 0 else float("inf")
+        print(f"  [{label}]  n={n} pair·seed")
+        print(f"     camel(준수) 평균 {sum(cam)/len(cam):.4f} | "
+              f"snake(위반) 평균 {sum(sna)/len(sna):.4f}")
+        print(f"     Δ(snake−camel) = {m:+.4f} ± {se:.4f} (SE),  z≈{z:+.1f}")
+        print(f"     → {'위반 이름을 더 참조(양)' if m > 0 else '위반 이름을 덜/동일 참조'} "
+              f"{'*유의 가능*' if abs(z) >= 2 else '(약함)'}\n")
+    print("  ※ 길이·위치 고정 → 순수 내용(snake vs camel) 효과. 관측(--observe)의 구간 교란 제거.")
+    print("  ※ 여전히 상관·탐색적(H5/H6 주가설 아님). attention 크기 ≠ 인과(계획서 3.7).")
+
+
+def run_content(args):
+    os.makedirs(os.path.dirname(os.path.abspath(args.out)), exist_ok=True)
+    if args.summary_only:
+        print_content_summary(args.out)
+        return
+
+    import torch
+    from transformers import AutoModelForCausalLM, AutoTokenizer
+
+    model_id = args.model or OBSERVE_MODEL
+    if not torch.cuda.is_available():
+        sys.exit("CUDA 없음 — Colab을 GPU 런타임(T4)으로 바꿔라.")
+    if "int8" in model_id.lower() or "4bit" in model_id.lower():
+        sys.exit("양자화 모델 금지(CLAUDE.md).")
+
+    register_attention()
+    pairs = _load_pairs(single_token_only=not args.all_pairs)[: args.n_pairs]
+    seeds = [args.base_seed + k for k in range(args.n_seeds)]
+
+    done = set()
+    if os.path.exists(args.out):
+        with open(args.out) as f:
+            for line in f:
+                line = line.strip()
+                if line:
+                    try:
+                        r = json.loads(line)
+                        done.add((r["design_version"], r["model"],
+                                  r["pair_idx"], r["seed"]))
+                    except (json.JSONDecodeError, KeyError):
+                        continue
+    pending = [(pi, s) for pi in range(len(pairs)) for s in seeds
+               if (DESIGN_VERSION_CONTENT, model_id, pi, s) not in done]
+    print(f"pair {len(pairs)}개(single-token={not args.all_pairs}) × seed {len(seeds)} "
+          f"= {len(pairs)*len(seeds)} 세션, 남은 {len(pending)}")
+    if not pending:
+        print_content_summary(args.out)
+        return
+
+    print(f"[{model_id}] 로드 중 (attn_implementation={ATTN_NAME}, fp16)...")
+    tokenizer = AutoTokenizer.from_pretrained(model_id)
+    model = AutoModelForCausalLM.from_pretrained(
+        model_id, torch_dtype=torch.float16, device_map="auto",
+        attn_implementation=ATTN_NAME).eval()
+
+    n_ok, skip = 0, {}
+    for pi, s in pending:
+        rec, why = content_session(model, tokenizer, torch, pairs[pi], pi, s, args)
+        if rec is None:
+            skip[why] = skip.get(why, 0) + 1          # 정렬 실패는 조용히 버리지 않고 집계
+            continue
+        append_jsonl(args.out, rec)
+        n_ok += 1
+    print(f"기록 {n_ok}세션. 정렬로 폐기: {skip or '없음'} "
+          f"(len_mismatch/align_fail = 문맥에서 토큰이 안 맞은 pair)")
+    print_content_summary(args.out)
+
+
+# ─────────────────────────────────────────────────────────────
 
 def main():
     ap = argparse.ArgumentParser(description="2단계 attention 관측 (NIAR)")
@@ -706,8 +964,10 @@ def main():
     mode.add_argument("--validate", action="store_true",
                       help="512토큰 eager 대조 검증 (관측 전 필수 게이트)")
     mode.add_argument("--observe", action="store_true", help="NIAR 관측 실행")
+    mode.add_argument("--content", action="store_true",
+                      help="내용-분리 측정: matched pair로 위치·길이 고정, 이름만 snake↔camel")
 
-    ap.add_argument("--model", default=None, help="기본: 관측=3B, 검증=1.5B")
+    ap.add_argument("--model", default=None, help="기본: 관측·내용=3B, 검증=1.5B")
     # 관측
     ap.add_argument("--levels", nargs="+", type=int, default=[4, 3, 2, 1, 0])
     ap.add_argument("--n-seeds", type=int, default=20)
@@ -720,12 +980,18 @@ def main():
     ap.add_argument("--top-p", type=float, default=0.95)
     ap.add_argument("--value-norm", action="store_true", default=True,
                     help="‖α·v‖ 보완 지표도 캡처(Kobayashi 2020)")
-    ap.add_argument("--out", default=DEFAULT_OUT)
+    ap.add_argument("--out", default=None,
+                    help="기본: 관측=stage2_niar.jsonl, 내용=stage2_content.jsonl")
     ap.add_argument("--summary-only", action="store_true")
     ap.add_argument("--layer-summary", action="store_true",
                     help="층별 진단(조건 hi−lo Δ). 전체 평균이 평탄할 때 어느 층에서 갈리는지")
     ap.add_argument("--top-layers", type=int, default=8,
                     help="--layer-summary에서 |Δ| 상위 몇 개 층을 보일지")
+    # 내용-분리 측정
+    ap.add_argument("--n-pairs", type=int, default=80, help="matched pair 개수(앞에서부터)")
+    ap.add_argument("--n-filler", type=int, default=8, help="target 주변 filler 함수 수")
+    ap.add_argument("--all-pairs", action="store_true",
+                    help="단일 토큰 분기 pair만이 아니라 전체 matched pair 사용")
     # 검증
     ap.add_argument("--dtype", choices=["float16", "float32"], default="float32",
                     help="검증 정밀도. fp32면 tight tolerance")
@@ -733,8 +999,12 @@ def main():
     ap.add_argument("--max-prompt-tokens", type=int, default=512)
 
     args = ap.parse_args()
+    if args.out is None:
+        args.out = DEFAULT_CONTENT_OUT if args.content else DEFAULT_OUT
     if args.validate:
         run_validate(args)
+    elif args.content:
+        run_content(args)
     else:
         run_observe(args)
 

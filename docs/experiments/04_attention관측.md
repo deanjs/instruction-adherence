@@ -57,6 +57,7 @@
 - 하네스: [`src/stage2_attention.py`](../../src/stage2_attention.py)
   - `--validate` — 512토큰 eager 대조 검증(계획서 3.4). **관측의 게이트.**
   - `--observe` — exp1 조건(compliant_remaining)·seed를 그대로 재사용해 지침·준수 코드·위반 코드 참조 비율을 관측.
+  - `--content` — **내용-분리 측정(교란 제거).** Step 0 토큰 수 일치 pair로 같은 위치·같은 길이에서 이름만 snake↔camel 교체, naming step에서 target 이름 토큰의 raw attention + `‖α·v‖`를 대조. → `results/stage2_content.jsonl`.
 - Colab 진입점: [`notebooks/stage2_colab.ipynb`](../../notebooks/stage2_colab.ipynb) (검증 → 관측 → 집계).
 - 관측 결과: `results/stage2_niar.jsonl` (세션 단위 append, `(model, condition, seed)`로 재개).
 - 구현 메모:
