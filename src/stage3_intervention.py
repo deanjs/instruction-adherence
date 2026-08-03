@@ -314,7 +314,10 @@ def build_prompt(tokenizer, ctx_pair, ctx_style, seed, n_filler):
     반환: dict(prompt_text, input_ids, prompt_len, code_pos, instr_pos).
       code_pos  = 선행 코드 블록(context 함수 포함) 토큰 위치 → P1a 치환 구간.
       instr_pos = 시스템 프롬프트 꼬리 지침 문장 위치 → P2 배율 구간.
-    프롬프트는 "```python\\ndef "로 프라이밍 → 다음 토큰이 새 함수의 결정 지점.
+    프롬프트는 "```python\\ndef"로 프라이밍(끝 공백 없음) → 다음 토큰이 새 함수의 결정 지점.
+    후보 이름은 **선행 공백**을 달아 붙인다(`decision_strings`): Qwen/GPT BPE는 선행 공백을
+    단어에 병합하므로, 끝 공백 primer + 무공백 이름이면 base가 base+name의 토큰 접두가 아니게
+    되어(경계 병합) 후보 추출이 깨진다. → primer는 무공백, 이름은 선행 공백으로 경계 고정.
     """
     name = ctx_pair[ctx_style]
     ctx_body = "def {n}(value):\n    return _process(value)".format(n=name)
@@ -333,7 +336,7 @@ def build_prompt(tokenizer, ctx_pair, ctx_style, seed, n_filler):
     ]
     prompt_text = tokenizer.apply_chat_template(
         messages, tokenize=False, add_generation_prompt=True)
-    prompt_text += "```python\ndef "
+    prompt_text += "```python\ndef"                     # 끝 공백 없음 — 이름은 선행 공백으로 붙임
 
     enc = tokenizer(prompt_text, return_offsets_mapping=True, add_special_tokens=False)
     offsets, input_ids = enc["offset_mapping"], enc["input_ids"]
@@ -350,6 +353,15 @@ def build_prompt(tokenizer, ctx_pair, ctx_style, seed, n_filler):
 
     return dict(prompt_text=prompt_text, input_ids=input_ids, prompt_len=len(input_ids),
                 code_pos=code_pos, instr_pos=instr_pos)
+
+
+def decision_strings(decision):
+    """결정 지점 후보 문자열 — primer가 무공백 "def"로 끝나므로 이름에 선행 공백을 붙인다.
+
+    반환: (" applyInvoice", " apply_invoice") 형태. 두 문자열의 첫 토큰(" apply…")은 공유되고
+    표기 분기 지점부터 갈린다. 조건 무관 고정 문자열(규칙 2).
+    """
+    return " " + decision["camel"], " " + decision["snake"]
 
 
 def candidate_ids(tokenizer, base_prompt_text, name):
@@ -427,10 +439,11 @@ def prepare_session(model, tokenizer, torch, ctx_pair, decision, seed, n_filler)
     # 두 context 프롬프트는 context 함수명(camel/snake) 때문에 서로 다르다 — 그게 조건이다.
     # 하지만 후보는 "```python\ndef " 프라이밍 **뒤**에 붙는 동일 문자열이라, 두 조건에서
     # 같은 토큰열이어야 한다. 양쪽에서 뽑아 일치를 검증(어긋나면 폐기).
-    yc_a = candidate_ids(tokenizer, a["prompt_text"], decision["camel"])
-    yv_a = candidate_ids(tokenizer, a["prompt_text"], decision["snake"])
-    yc_b = candidate_ids(tokenizer, b["prompt_text"], decision["camel"])
-    yv_b = candidate_ids(tokenizer, b["prompt_text"], decision["snake"])
+    dc, dv = decision_strings(decision)
+    yc_a = candidate_ids(tokenizer, a["prompt_text"], dc)
+    yv_a = candidate_ids(tokenizer, a["prompt_text"], dv)
+    yc_b = candidate_ids(tokenizer, b["prompt_text"], dc)
+    yv_b = candidate_ids(tokenizer, b["prompt_text"], dv)
     if None in (yc_a, yv_a, yc_b, yv_b):
         return None, "cand_boundary_merge"
     if yc_a != yc_b or yv_a != yv_b:
@@ -710,10 +723,22 @@ def run_validate(args):
     pairs = _load_pairs()
     decision = choose_decision_pair(pairs)
     _, b_pairs = split_context_pairs(pairs, decision)
-    ctx = b_pairs[0]
-    sess, why = prepare_session(model, tok, torch, ctx, decision, seed=0,
-                                n_filler=args.n_filler)
-    assert sess is not None, f"검증용 세션 준비 실패: {why}"
+    # 첫 pair가 정렬/경계 사유로 폐기될 수 있으니 몇 개 시도(게이트가 단일 pair에 안 걸리게).
+    sess = why = ctx = None
+    tried = []
+    for cand in b_pairs[:12]:
+        s, w = prepare_session(model, tok, torch, cand, decision, seed=0,
+                               n_filler=args.n_filler)
+        tried.append((cand["camel"], w))
+        if s is not None:
+            sess, ctx = s, cand
+            break
+    assert sess is not None, (
+        f"검증용 세션 준비 실패 — 시도한 pair들: {tried}\n"
+        f"(decision={decision['camel']}/{decision['snake']}) "
+        "대부분 cand_boundary_merge면 decision 후보 교체 필요.")
+    print(f"[검증] 세션 pair = {ctx['camel']}/{ctx['snake']}, "
+          f"decision = {decision['camel']}/{decision['snake']}")
     damaged, compliant = _score_baselines(model, torch, sess)
 
     results = {}
@@ -800,7 +825,8 @@ def run_validate(args):
 
 def _validate_full_ids(tok, ctx, decision):
     P = build_prompt(tok, ctx, "snake", 0, 6)
-    yc = candidate_ids(tok, P["prompt_text"], decision["camel"])
+    dc, _ = decision_strings(decision)
+    yc = candidate_ids(tok, P["prompt_text"], dc)
     return P["input_ids"] + (yc or [])
 
 
