@@ -202,9 +202,17 @@ def intervene_attention_forward(module, query, key, value, attention_mask,
     if active and _IVX.mode == "p2":
         key_states = _repeat_kv(key, n_rep)
         value_states = _repeat_kv(value, n_rep)
+        kvlen = key_states.shape[-2]
         scores = torch.matmul(query, key_states.transpose(2, 3)) * scaling  # (b,H,q,kv)
         if attention_mask is not None:
-            scores = scores + attention_mask[:, :, :, : key_states.shape[-2]]
+            scores = scores + attention_mask[:, :, :, :kvlen]
+        elif q_len > 1:
+            # mask가 없으면 SDPA는 is_causal로 마스킹한다. 명시적 경로는 직접 causal 처리 —
+            # 안 하면 후보 토큰이 미래를 봐 λ=1도 항등이 아니게 된다(V6 버그). end-정렬 causal.
+            qi = torch.arange(q_len, device=scores.device).view(q_len, 1)
+            ki = torch.arange(kvlen, device=scores.device).view(1, kvlen)
+            causal = (ki <= (kvlen - q_len + qi)).view(1, 1, q_len, kvlen)
+            scores = scores.masked_fill(~causal, float("-inf"))
         probs = F.softmax(scores, dim=-1, dtype=torch.float32)             # (b,H,q,kv)
         pos = _IXV_pos(torch, _IVX.instr_pos, probs.device)
         pos = pos[pos < probs.shape[-1]]
@@ -315,9 +323,10 @@ def choose_decision_pair(pairs):
 
 
 def split_context_pairs(pairs, decision):
-    """context pair를 A/B로 분할. **점수를 전혀 참조하지 않는다**(규칙 1).
+    """주 context pair(= 클러스터 라벨)를 A/B로 분할. **점수 무관**(규칙 1).
 
-    고정 seed 셔플 후 앞 N=A, 다음 N=B. decision 쌍은 제외.
+    고정 seed 셔플 후 order[:50]=A, [50:100]=B. decision 쌍 제외.
+    (동반 함수 pool은 order[100:]에서 별도로 뽑아 A/B와 겹치지 않게 한다.)
     """
     pool = [p for p in pairs if p["camel"] != decision["camel"]]
     rng = random.Random(SPLIT_SEED)
@@ -328,25 +337,40 @@ def split_context_pairs(pairs, decision):
     return a, b
 
 
-def build_prompt(tokenizer, ctx_pair, ctx_style, seed, n_filler):
-    """context pair 함수를 ctx_style(camel=준수 / snake=위반)로 넣은 프롬프트.
+def companion_pairs(pairs, decision, n):
+    """동반(companion) 토글 함수 — 조작 강도를 위한 **고정 다수 위반**용.
 
-    반환: dict(prompt_text, input_ids, prompt_len, code_pos, instr_pos).
-      code_pos  = 선행 코드 블록(context 함수 포함) 토큰 위치 → P1a 치환 구간.
-      instr_pos = 시스템 프롬프트 꼬리 지침 문장 위치 → P2 배율 구간.
-    프롬프트는 "```python\\ndef"로 프라이밍(끝 공백 없음) → 다음 토큰이 새 함수의 결정 지점.
-    후보 이름은 **선행 공백**을 달아 붙인다(`decision_strings`): Qwen/GPT BPE는 선행 공백을
-    단어에 병합하므로, 끝 공백 primer + 무공백 이름이면 base가 base+name의 토큰 접두가 아니게
-    되어(경계 병합) 후보 추출이 깨진다. → primer는 무공백, 이름은 선행 공백으로 경계 고정.
+    exp1에서 효과는 위반이 다수(8~12/12)일 때 났다. 여기선 주 context pair 하나로는
+    준수·위반 gap이 0에 가깝다(camelCase 지침이 강해 함수 1개론 결정이 안 바뀜).
+    → 주 pair + (n−1)개의 **고정 동반 matched pair**를 조건에 따라 **함께 토글**한다
+    (준수=전부 camel, 위반=전부 snake). 전부 토큰정렬 pair라 정렬 유지.
+    동반 pool은 A/B(order[:100])와 겹치지 않게 order[100:]에서 고정 추출 → 전 세션 공통.
     """
-    name = ctx_pair[ctx_style]
-    ctx_body = "def {n}(value):\n    return _process(value)".format(n=name)
-    pool = [f["camel"] for f in PREFIX_FUNCS]            # filler는 준수(camel) 맥락 고정
-    order = random.Random(seed).sample(range(len(pool)), min(n_filler, len(pool)))
-    fillers = [pool[i] for i in order]
-    slot = len(fillers) // 2
-    parts = fillers[:slot] + [ctx_body] + fillers[slot:]
+    pool = [p for p in pairs if p["camel"] != decision["camel"]]
+    rng = random.Random(SPLIT_SEED)
+    order = list(range(len(pool)))
+    rng.shuffle(order)
+    comp_idx = order[2 * N_SPLIT: 2 * N_SPLIT + max(0, n - 1)]
+    return [pool[i] for i in comp_idx]
+
+
+def build_prompt(tokenizer, ctx_pair, ctx_style, seed, companions):
+    """주 context pair + 동반 pair들을 ctx_style(camel=준수/snake=위반)로 **함께 토글**.
+
+    반환: dict(prompt_text, input_ids, prompt_len, code_pos, ctxfunc_pos, ctxname_pos, instr_pos).
+      code_pos    = 선행 코드 블록 전체(모든 토글 함수) → P1a 주 치환 구간.
+      ctxfunc/ctxname = **주 context pair** 함수/이름 span(단계적 범위·전파 대조 기준점).
+    프롬프트는 "```python\\ndef"로 프라이밍(끝 공백 없음) → 다음 토큰이 새 함수의 결정 지점.
+    후보 이름은 선행 공백으로 붙인다(BPE 경계 고정, `decision_strings`).
+    """
+    funcs = [ctx_pair] + list(companions)               # [0]=주 pair
+    bodies = ["def {n}(value):\n    return _process(value)".format(n=f[ctx_style])
+              for f in funcs]
+    order = random.Random(seed).sample(range(len(bodies)), len(bodies))
+    parts = [bodies[i] for i in order]
     prefix = "\n\n\n".join(parts)
+    primary_body = bodies[0]                             # 주 pair 본문(현재 style)
+    primary_name = ctx_pair[ctx_style]
 
     messages = [
         {"role": "system", "content": system_prompt()},
@@ -361,18 +385,15 @@ def build_prompt(tokenizer, ctx_pair, ctx_style, seed, n_filler):
     enc = tokenizer(prompt_text, return_offsets_mapping=True, add_special_tokens=False)
     offsets, input_ids = enc["offset_mapping"], enc["input_ids"]
 
-    # 선행 코드 블록 구간(주 치환 대상). 준수/위반 두 조건에서 이름 토큰만 다르므로,
-    # 블록 전체를 치환 구간으로 잡아도 이름 이전은 donor=self(무변화), 이름 이후만 실제 치환.
     cp = prompt_text.find(prefix)
     code_pos = _char_span_to_tokens(offsets, cp, cp + len(prefix)) if cp != -1 else []
 
-    # context 함수 span(조건 간 실제로 다른 핵심 구간). 그 안의 **이름 토큰 span**도 따로.
-    cf = prompt_text.find(ctx_body, cp) if cp != -1 else -1
-    ctxfunc_pos = _char_span_to_tokens(offsets, cf, cf + len(ctx_body)) if cf != -1 else []
-    cn = prompt_text.find(name, cf) if cf != -1 else -1
-    ctxname_pos = _char_span_to_tokens(offsets, cn, cn + len(name)) if cn != -1 else []
+    # 주 context 함수 span + 그 안의 이름 토큰 span(단계적 범위·pre/post 대조 기준).
+    cf = prompt_text.find(primary_body, cp) if cp != -1 else -1
+    ctxfunc_pos = _char_span_to_tokens(offsets, cf, cf + len(primary_body)) if cf != -1 else []
+    cn = prompt_text.find(primary_name, cf) if cf != -1 else -1
+    ctxname_pos = _char_span_to_tokens(offsets, cn, cn + len(primary_name)) if cn != -1 else []
 
-    # 지침 구간(P2 대상).
     instr = INSTRUCTION_RULE[INSTRUCTION].strip()
     ci = prompt_text.find(instr)
     instr_pos = _char_span_to_tokens(offsets, ci, ci + len(instr)) if ci != -1 else []
@@ -443,12 +464,13 @@ def pref_score(model, torch, prefix_kv, prefix_len, trigger_id, yc_ids, yv_ids):
 # 한 (context pair, seed) 세션 준비 — prefix 캐시·donor 1회 생성 후 재사용
 # ─────────────────────────────────────────────────────────────
 
-def prepare_session(model, tokenizer, torch, ctx_pair, decision, seed, n_filler):
+def prepare_session(model, tokenizer, torch, ctx_pair, decision, seed, companions):
     """위반/준수 두 조건의 prefix 캐시를 만들고 정렬을 검증한다.
 
-    반환: dict 또는 (None, 사유). donor는 준수(camel) 캐시의 코드 구간 열 슬라이스.
+    주 pair + 동반 pair들을 함께 토글(준수=전부 camel / 위반=전부 snake).
+    반환: dict 또는 (None, 사유).
     """
-    P = {s: build_prompt(tokenizer, ctx_pair, s, seed, n_filler)
+    P = {s: build_prompt(tokenizer, ctx_pair, s, seed, companions)
          for s in ("camel", "snake")}
     a, b = P["camel"], P["snake"]
 
@@ -491,25 +513,22 @@ def prepare_session(model, tokenizer, torch, ctx_pair, decision, seed, n_filler)
     ctxfunc_pos = clip(a.get("ctxfunc_pos", []))
     ctxname_pos = clip(a.get("ctxname_pos", []))
     instr_pos = clip(a["instr_pos"])
-    # 대조용 위치 집합 — **downstream 전파 문제 반영(리뷰)**:
-    #   context 함수 이전(pre) 구간은 위반 신호를 아직 안 읽어 두 조건 K/V가 진짜 동일 → Δ≈0.
-    #   context 함수 이후(post) 구간은 문자열이 같아도 앞선 위반 이름을 attention으로 읽은
-    #     downstream이라 K/V가 다를 수 있다 → "0" 단정 금지, **전파 대조**로 따로 본다.
-    ctx_start = min(ctxfunc_pos) if ctxfunc_pos else prefix_len
-    ctx_end = max(ctxfunc_pos) if ctxfunc_pos else 0
-    prectx_pos = [p for p in range(SINK, ctx_start) if p not in set(instr_pos)]
-    postctx_pos = [p for p in code_pos if p > ctx_end]
+    # 대조용 위치 — **다중 토글에선 코드 블록 전체가 조건 간 다르다**(모든 함수가 토글).
+    #   그래서 "진짜 무변화" 대조는 조건 간 **동일한 영역**뿐: 지침·코드 블록 밖 보일러플레이트.
+    #   (단일 토글 때의 prectx/postctx는 다른 토글 함수에 오염되므로 폐기.)
+    code_start = min(code_pos) if code_pos else prefix_len
+    seg_set = set(code_pos) | set(instr_pos)
+    boiler_pos = [p for p in range(SINK, code_start) if p not in seg_set][:len(code_pos)]
 
     def T(ps):
         return torch.tensor(ps, dtype=torch.long)
 
     pos = {
-        "code": T(code_pos),            # 선행 코드 전체(주 개입 범위)
-        "ctxfunc": T(ctxfunc_pos),      # context 함수 전체(중간 범위)
-        "ctxname": T(ctxname_pos),      # context 함수 이름 토큰만(최소 범위 — 2단계 이름 신호)
-        "instr": T(instr_pos),          # 지침(비트 동일 → ≈0 대조)
-        "prectx": T(prectx_pos),        # context 이전(진짜 무변화 대조 → ≈0)
-        "postctx": T(postctx_pos),      # context 이후(downstream 전파 대조 → 0 아닐 수 있음)
+        "code": T(code_pos),            # 선행 코드 전체(모든 토글 함수 = 주 개입 범위)
+        "ctxfunc": T(ctxfunc_pos),      # 주 context 함수 전체(중간 범위 — 단계적 국소)
+        "ctxname": T(ctxname_pos),      # 주 context 함수 이름 토큰만(최소 범위 — 2단계 이름 신호)
+        "instr": T(instr_pos),          # 지침(조건 간 비트 동일 → ≈0 대조)
+        "boiler": T(boiler_pos),        # 코드 블록 밖 보일러플레이트(조건 간 동일 → 진짜 ≈0)
     }
 
     # prefix(마지막 trigger 토큰 제외) prefill → 캐시. 개입 없이(iv_off) 표준 경로.
@@ -522,7 +541,7 @@ def prepare_session(model, tokenizer, torch, ctx_pair, decision, seed, n_filler)
         kv[s] = _extract_kv(out.past_key_values)
 
     return dict(
-        ctx_pair=ctx_pair, seed=seed, n_filler=n_filler,
+        ctx_pair=ctx_pair, seed=seed, n_ctx=len(companions) + 1,
         prefix_len=prefix_len, trigger_id=trigger_id,
         pos=pos, instr_pos=pos["instr"],
         yc_ids=yc, yv_ids=yv,
@@ -592,6 +611,8 @@ def run_a(args):
     pairs = _load_pairs()
     decision = choose_decision_pair(pairs)
     a_pairs, _ = split_context_pairs(pairs, decision)
+    companions = companion_pairs(pairs, decision, args.n_ctx)
+    print(f"[A] n_ctx={args.n_ctx} (주 pair + 동반 {len(companions)}개 함께 토글)")
     if args.max_pairs:
         a_pairs = a_pairs[:args.max_pairs]
     done = load_done(args.out)
@@ -603,7 +624,7 @@ def run_a(args):
             if key in done:
                 continue
             sess, why = prepare_session(model, tok, torch, ctx, decision, seed,
-                                        args.n_filler)
+                                        companions)
             if sess is None:
                 append_jsonl(args.out, _skip_rec("A", "baseline", pi, seed, ctx,
                                                  decision, args.model, why))
@@ -653,13 +674,11 @@ def _configs_b(args, n_layers, n_kv_heads, n_q_heads):
                      dict(pos="ctxname", donor="comp", groups=None, layers=[main])))
         cfgs.append((f"p1a_L{main}_func", "p1a",
                      dict(pos="ctxfunc", donor="comp", groups=None, layers=[main])))
-        # L25 규모 대조(위치만 교체):
-        #   noop=자기이식(정확0)·instr=지침(비트동일≈0)·prectx=context 이전(진짜≈0)
-        #   postctx=context 이후(downstream 전파 — 0 단정 금지, 특이성 참고).
+        # L25 규모 음성 대조(위치만 교체) — 전부 조건 간 동일 영역이라 Δ≈0 기대:
+        #   noop=자기이식(정확0)·instr=지침(비트동일)·boiler=코드 밖 보일러플레이트(동일).
         for pos_name, tag, donor in (("code", "noop", "self"),
                                      ("instr", "instr", "comp"),
-                                     ("prectx", "prectx", "comp"),
-                                     ("postctx", "postctx", "comp")):
+                                     ("boiler", "boiler", "comp")):
             cfgs.append((f"ctl_{tag}_L{main}", "p1a",
                          dict(pos=pos_name, donor=donor, groups=None, layers=[main])))
         if args.sweep:
@@ -709,6 +728,8 @@ def run_b(args):
     pairs = _load_pairs()
     decision = choose_decision_pair(pairs)
     _, b_pairs = split_context_pairs(pairs, decision)
+    companions = companion_pairs(pairs, decision, args.n_ctx)
+    print(f"[B] n_ctx={args.n_ctx} (주 pair + 동반 {len(companions)}개 함께 토글)")
     if args.max_pairs:
         b_pairs = b_pairs[:args.max_pairs]
     done = load_done(args.out)
@@ -717,7 +738,7 @@ def run_b(args):
     for pi, ctx in enumerate(b_pairs):
         for seed in seeds:
             sess, why = prepare_session(model, tok, torch, ctx, decision, seed,
-                                        args.n_filler)
+                                        companions)
             if sess is None:
                 append_jsonl(args.out, _skip_rec("B", "prep", pi, seed, ctx,
                                                  decision, args.model, why))
@@ -785,12 +806,14 @@ def run_validate(args):
     pairs = _load_pairs()
     decision = choose_decision_pair(pairs)
     _, b_pairs = split_context_pairs(pairs, decision)
+    companions = companion_pairs(pairs, decision, args.n_ctx)
+    print(f"[검증] n_ctx={args.n_ctx} (주 pair + 동반 {len(companions)}개 함께 토글)")
     # 첫 pair가 정렬/경계 사유로 폐기될 수 있으니 몇 개 시도(게이트가 단일 pair에 안 걸리게).
     sess = why = ctx = None
     tried = []
     for cand in b_pairs[:12]:
         s, w = prepare_session(model, tok, torch, cand, decision, seed=0,
-                               n_filler=args.n_filler)
+                               companions=companions)
         tried.append((cand["camel"], w))
         if s is not None:
             sess, ctx = s, cand
@@ -803,7 +826,37 @@ def run_validate(args):
           f"decision = {decision['camel']}/{decision['snake']}")
     damaged, compliant = _score_baselines(model, torch, sess)
 
+    # ── 진단(gap=0 원인 규명): span 길이·n_diff·캐시 실제 차이 ──
+    li = args.main_layer
+    kc, kv = sess["kv_comp"], sess["kv_viol"]
+    cp = sess["pos"]["code"]
+
+    def _maxdiff(a, b, idx=None):
+        if idx is not None:
+            if idx.numel() == 0:
+                return None
+            a = a.index_select(2, idx.to(a.device))
+            b = b.index_select(2, idx.to(b.device))
+        return float((a.float() - b.float()).abs().max().item())
+
+    full_diff = max(_maxdiff(kc[l][0], kv[l][0]) for l in range(len(kc)))     # 전 층 K 최대차
+    code_diff_L = _maxdiff(kc[li][0], kv[li][0], cp)                          # L25 code K 차
+    print("\n[진단] gap=0 원인 규명")
+    print(f"  n_diff(토큰 상이 수)={sess['n_diff']}  "
+          f"len(code_pos)={cp.numel()}  len(instr_pos)={sess['instr_pos'].numel()}")
+    print(f"  damaged={damaged:.6f}  compliant={compliant:.6f}  gap={compliant-damaged:.6f}")
+    print(f"  준수·위반 prefill K 최대차(전층)={full_diff:.3e}  "
+          f"L25 code 구간 K 최대차={code_diff_L}")
+    print("  해석: code_pos=0 → span 버그 / L25차=0 but 전층차>0 → span 오배치 / "
+          "차>0 but gap≈0 → 조작이 약함(설계)")
+
     results = {}
+    results["diagnostics"] = {
+        "n_diff": sess["n_diff"], "len_code_pos": int(cp.numel()),
+        "len_instr_pos": int(sess["instr_pos"].numel()),
+        "gap": compliant - damaged, "prefill_K_maxdiff_all": full_diff,
+        "L25_code_K_maxdiff": code_diff_L,
+    }
 
     # V4 — GQA 단위 (규칙 4)
     results["V4_gqa_units"] = {
@@ -906,7 +959,7 @@ def run_validate(args):
 
 
 def _validate_full_ids(tok, ctx, decision):
-    P = build_prompt(tok, ctx, "snake", 0, 6)
+    P = build_prompt(tok, ctx, "snake", 0, [])
     dc, _ = decision_strings(decision)
     yc = candidate_ids(tok, P["prompt_text"], dc)
     return P["input_ids"] + (yc or [])
@@ -1073,8 +1126,8 @@ def print_summary(out_path, n_boot=2000):
             ci = f"[{lo:+.4f},{hi:+.4f}]" if lo is not None else ""
             print(f"{ckey:26s} {m:+.4f} {ci:>20s}")
 
-    # ── 음성 대조(특이성) ──
-    print("\n── 대조 (L25 규모) ──  [prectx=진짜≈0, postctx=downstream 전파(0 아닐 수 있음)]")
+    # ── 음성 대조(특이성) — 전부 조건 간 동일 영역 → Δ≈0 기대 ──
+    print("\n── 대조 (L25 규모, 조건 간 동일 영역 → Δ≈0 기대) ──")
     for ckey in sorted(k for k in by_cfg if k.startswith("ctl_")):
         cl, m, lo, hi = stat(ckey)
         ci = f"[{lo:+.4f},{hi:+.4f}]" if lo is not None else ""
@@ -1097,8 +1150,7 @@ def print_summary(out_path, n_boot=2000):
 
     print("\n※ 주 판정: p1a_L{}_allG 효과가 나머지 층(같은 규모) 귀무분포의 상위 꼬리인가."
           .format(main_layer))
-    print("※ 건전성: ctl_noop=0(정확)·ctl_instr·ctl_prectx≈0. "
-          "ctl_postctx는 downstream 전파라 0 단정 금지.")
+    print("※ 건전성: ctl_noop=0(정확)·ctl_instr·ctl_boiler≈0(조건 간 동일 영역).")
     print("※ CI는 two-way(이름쌍×seed) cluster bootstrap. "
           "RecoveryRatio=config 효과 ÷ A분할 gap(분자·분모 독립 부트).")
 
@@ -1136,7 +1188,9 @@ def main():
     ap.add_argument("--dtype", default="fp16", choices=["fp16", "fp32", "bf16"])
     ap.add_argument("--n-seeds", type=int, default=3)
     ap.add_argument("--seed-start", type=int, default=0)
-    ap.add_argument("--n-filler", type=int, default=6)
+    ap.add_argument("--n-ctx", type=int, default=8,
+                    help="함께 토글할 context 함수 수(주 pair + 동반). 위반=전부 snake. "
+                         "1이면 조작 약함(gap≈0). exp1처럼 다수(≈8) 권장")
     ap.add_argument("--max-pairs", type=int, default=0,
                     help="파일럿용 — context pair 수 제한(0=전체 50)")
     ap.add_argument("--main-layer", type=int, default=MAIN_LAYER,

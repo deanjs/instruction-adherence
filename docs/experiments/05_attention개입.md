@@ -29,6 +29,15 @@
 행동 실험의 ±3 토큰 허용을 **여기 적용 금지.** 1토큰만 달라도 위치 인덱스·RoPE가 어긋나 K/V 치환이 정의 안 됨.
 → 두 표기의 **총 토큰 수 동일 + 결정 지점 인덱스 동일** pair만 사용(Step 0에서 316쌍 확보).
 
+### 조작 강도 — 다중 토글 (파일럿에서 확정)
+
+주 context pair 하나만 토글하면 준수·위반 gap이 0에 가깝다(1차 파일럿에서 확인:
+손상=준수=+1.19, gap≈0). camelCase 지침이 강해 함수 1개론 결정이 안 바뀐다 —
+exp1도 효과는 위반이 **다수(8~12/12)** 일 때 났다. → 주 pair + 동반 matched pair
+`(n_ctx−1)`개를 **함께 토글**한다(준수=전부 camel / 위반=전부 snake). 전부 토큰정렬
+pair라 정렬 유지. 동반 pool은 A/B와 겹치지 않는 고정 집합(전 세션 공통). `--n-ctx`(기본 8).
+클러스터 라벨은 여전히 **주 pair**라 (이름쌍×seed) two-way 구조가 유지된다.
+
 ### 왜 지침 구간을 교체하는 건 무의미한가 (3.6)
 
 causal mask 때문에 지침 K/V는 두 조건에서 비트 단위로 동일 → 교체해도 아무 변화 없음.
@@ -73,7 +82,9 @@ Qwen은 GQA(query head 28, KV head 4, 7:1 공유).
 - 하네스: [`src/stage3_intervention.py`](../../src/stage3_intervention.py)
   - `--validate` — **불변식 자기검증. 실측의 게이트.** V1 표준경로=SDPA · V2 no-op 불변 ·
     V3 지침 patch≈0 · V4 GQA 단위(P1a=KV group·P2=query head) · V5 P2 질량 보존 ·
-    V6 λ=1 항등 · V7 L25 이식이 점수를 움직이는지(sanity). 크기 무관 → 1.5B fp32.
+    V6 λ=1 항등(P2 명시 경로도 causal 마스킹 — 안 하면 후보가 미래를 봄) ·
+    V7 L25 이식이 점수를 **유한·비영**으로 움직이는지. 크기 무관 → 1.5B fp32.
+    **진단 출력**: n_diff·code_pos 길이·gap·준수/위반 캐시 실제 차이(gap=0 원인 규명용).
   - `--run-a` — A분할(50쌍) 기저 gap. `--max-pairs`로 파일럿.
   - `--run-b` — B분할(50쌍) 개입. `--p1a`(주) `--p2`(보조). 대조군은 P1a에 자동 포함.
     `--sweep`이면 group별·후보 층 query head 28개 순회까지. `--main-layer`/`--aux-layers` 재정의.
@@ -92,11 +103,11 @@ Qwen은 GQA(query head 28, KV head 4, 7:1 공유).
 - **회복 상한** = `p1a_full`(전 층×전 group). Recovery Ratio 분자 상한.
 - **단계적 범위(보조)** — 원인이 이름 토큰인지 이후 전파 표현인지 구분:
   `p1a_L25_name`(context 이름 토큰만) ⊂ `p1a_L25_func`(함수 전체) ⊂ `p1a_L25_allG`(선행 코드 전체).
-- **대조(전부 L25 규모, 위치만 교체)** — **downstream 전파 반영**:
-  `ctl_noop_L25`(donor=self, 정확히 0), `ctl_instr_L25`(지침, 비트 동일 ≈0),
-  `ctl_prectx_L25`(**context 함수 이전** 구간 — 위반 신호 미도달 → 진짜 ≈0),
-  `ctl_postctx_L25`(**context 함수 이후** 구간 — 앞선 위반 이름을 attention으로 읽은
-  downstream이라 **0 단정 금지**, 전파 특이성 참고).
+- **대조(전부 L25 규모, 위치만 교체, 조건 간 동일 영역 → Δ≈0)** —
+  `ctl_noop_L25`(donor=self, 정확히 0), `ctl_instr_L25`(지침, 비트 동일),
+  `ctl_boiler_L25`(코드 블록 밖 보일러플레이트 — 조건 간 동일). 다중 토글에선 코드
+  블록 전체가 조건 간 다르므로(모든 함수 토글), 단일 토글 때의 prectx/postctx 대조는
+  다른 토글 함수에 오염돼 폐기하고, **진짜 동일 영역**만 특이성 대조로 쓴다.
 - **P2** = 지침 α×λ. 전 층×전 head λ 곡선(**단조 추세 Spearman**) + 전 층 국소(층별 귀무).
 
 ### 통계 — two-way cluster bootstrap

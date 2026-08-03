@@ -55,7 +55,8 @@ context에 누적된 이전 코드를 규칙보다 우선해서 참조하기 때
   - 하네스: `src/stage3_intervention.py`(`--validate`/`--run-a`/`--run-b`/`--summary-only`), `notebooks/stage3_colab.ipynb`
   - **주 조건 = L25 단독 × 전 KV group** 코드 K/V 이식(2단계 재현 층). 전 층 각각 같은 규모로 돌려 L25 아닌 층이 규모-일치 귀무분포. `p1a_full`=회복 상한
   - P2=query head α×λ 곡선(단조성)+층 국소. 준수 선호 점수=작업일치 고정 후보(formatValue/format_value) teacher forcing
-  - 음성 대조 전부 L25 규모(no-op·지침·무관 코드·코드 외). cluster bootstrap(이름쌍·seed) CI·층 귀무·Recovery Ratio
+  - 조작 강도: 주 pair + 동반 matched pair 함께 토글(`--n-ctx`, 기본 8) — 단일 토글은 gap≈0(파일럿 확인)
+  - 음성 대조 전부 L25 규모·조건 간 동일 영역(no-op·지침·보일러플레이트). two-way cluster bootstrap(이름쌍×seed) CI·층 귀무·Recovery Ratio
   - **Colab에서 `--validate` PASS → 10쌍 파일럿 → 본실험**(`--run-a`→`--run-b`) 순. 그 전엔 미완료
   - P1b/P3(탐색)는 미구현(주 가설 H3=P1a에 집중)
 - [ ] 이후 계획서 7장 일정 참조
