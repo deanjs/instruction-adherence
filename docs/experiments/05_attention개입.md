@@ -65,6 +65,50 @@ Qwen은 GQA(query head 28, KV head 4, 7:1 공유).
 
 ---
 
+## 실행
+
+- 하네스: [`src/stage3_intervention.py`](../../src/stage3_intervention.py)
+  - `--validate` — **개입 하네스 불변식 자기검증. 실측의 게이트.** PASS 전엔 실측 미완료로 본다.
+    V1 개입 없는 경로=표준 SDPA(비트 근사)  ·  V2 no-op(donor=self)→준수 선호 점수 불변
+    V3 지침 patch→Δ≈0  ·  V4 **GQA 단위**(n_q=28·n_kv=4, P1a=KV group·P2=query head)
+    V5 P2 질량 보존(α 행합=1)  ·  V6 λ=1 항등. 크기 무관 → 1.5B fp32.
+  - `--run-a` — A분할(50쌍) 기저 gap(준수 baseline − 손상 baseline). Recovery Ratio 분모.
+  - `--run-b` — B분할(50쌍) 개입 실행. `--p1a`(주) `--p2`(보조) `--controls`(음성 대조).
+    `--sweep`이면 층×단위 국소화(전 층 × KV group 4 / 전 층 × query head)까지.
+  - `--summary-only` — Recovery Ratio·무작위 대조 대비 상위 꼬리 검정.
+- Colab 진입점: [`notebooks/stage3_colab.ipynb`](../../notebooks/stage3_colab.ipynb) (검증 → A → B → 집계).
+- 결과: `results/stage3_intervention.jsonl` — 세션 단위 append,
+  `(split, config_key, pair_idx, seed, model)`로 재개.
+
+### 하네스가 절대 규칙을 강제하는 방식
+
+- **규칙 1(점수 무관 선별):** context pair의 A/B 분할은 고정 seed(`SPLIT_SEED`) 셔플만 —
+  코드 어디서도 준수 선호 점수를 선별에 참조하지 않는다. Recovery Ratio 분자(B)·분모(A)를
+  분리 표본으로 두어 상관·평균 회귀 오독을 막는다.
+- **규칙 2(공통 고정 후보):** 결정 지점 후보는 `choose_decision_pair`가 고른 **한 쌍**을
+  모든 조건·모든 개입에서 동일 채점. 실제 생성 이름은 이 스크립트에서 쓰지 않는다(측정 분리).
+- **규칙 3(토큰 정확 일치):** `prepare_session`이 준수/위반 두 프롬프트의 토큰열을 대조해
+  **코드 구간 밖에서 한 토큰이라도 다르면 폐기**(`align_out_of_code`). 정렬돼야 코드 구간
+  K/V 치환의 위치가 정의된다.
+- **규칙 4(GQA 단위):** P1a는 **pre-repeat** `key/value (b, kvh, kv, d)`의 `kvh` 축(=KV group)을
+  `index_copy_`로 치환 → group 내 7개 query head를 함께 건드리는 사실이 자명하게 드러난다.
+  P2는 **post-softmax** α `(b, H, q, kv)`의 `H` 축(=query head)에 배율. `--validate` V4가
+  `n_kv_heads=4`·`n_q_heads=28`을 assert.
+- **규칙 5(사전 등록 보존):** 출력은 새 파일 `stage3_intervention.jsonl`. 기존 `results/`는 불변.
+
+### 개입 메커니즘 메모 (구현 판단)
+
+- 조건 간 다른 건 코드 구간 K/V뿐이고 지침 K/V는 비트 동일(§왜 지침 교체가 무의미한가).
+  그래서 **prefix KV 캐시는 위반본 하나만** 만들고(Colab 제약: 캐시 1회·재사용), 후보 채점
+  forward에서 코드 구간 열을 준수본 donor로 덮어써 P1a를 실현한다 — 모든 teacher-forcing
+  step에 자동 동일 적용. donor는 준수 prefix 캐시의 코드 구간 열 슬라이스.
+- P2는 채점 forward에서만 지침 열 α에 λ를 곱하고(질량 보존 시 재정규화), prefill은 표준
+  경로로 둔다(개입 없는 경로 비트 동일 = V1).
+- **P1b/P3(탐색)는 이 v1 미구현** — 주 가설은 H3(P1a)뿐이라 P1a·P2와 음성 대조·판정까지
+  먼저 닫는다. 기여분 분해(`c_C`/`c_I`) 이식은 후속 버전에서 별 파일로 추가(규칙 5).
+
+---
+
 ## 결과
 
 *(미실행 — 실행 후 채운다.)*

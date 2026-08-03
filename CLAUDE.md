@@ -47,9 +47,15 @@ context에 누적된 이전 코드를 규칙보다 우선해서 참조하기 때
   - 단일 토큰 분기 125/316 (39.6%) → 보조 지표 적용 가능 비율
   - 결과: `results/matched_pairs.json`, `results/step0_summary.json`
 - [ ] **Step 1** — 기저 준수율 smoke test (계획서 5.5 게이트: 55~85%)
-- [ ] **Step 2** — `AttentionInterface` 조건부 함수 + 512 토큰 eager 대조 검증
-  - 하네스 구현 완료: `src/stage2_attention.py`(`--validate`/`--observe`), `notebooks/stage2_colab.ipynb`
-  - **Colab에서 `--validate` PASS 확인 후** 관측(`--observe`) 진행 — 그 전엔 미완료
+- [x] **Step 2** — `AttentionInterface` 조건부 함수 + 512 토큰 eager 대조 검증
+  - 하네스: `src/stage2_attention.py`(`--validate`/`--observe`/`--content`/`--content2x2`), `notebooks/stage2_colab.ipynb`
+  - 커널 검증 PASS(`--validate`, 1.5B fp32): eager 대조 2632쌍, 최대 절대오차 5.96e-07
+  - 관측 100세션(`results/stage2_niar.jsonl`). 2×2로 "위반 상태" 효과 분리·개입 후보층 선정
+- [ ] **Step 3** — attention/KV 개입 (P1a·P2), 주 가설 H3. 계획서 3.5/3.6
+  - 하네스 구현: `src/stage3_intervention.py`(`--validate`/`--run-a`/`--run-b`/`--summary-only`), `notebooks/stage3_colab.ipynb`
+  - P1a=KV group(4) K/V 치환, P2=query head(28) α 배율, 준수 선호 점수=공통 고정 후보 teacher forcing
+  - **Colab에서 `--validate` PASS 확인 후** 실측(`--run-a`→`--run-b`) 진행 — 그 전엔 미완료
+  - P1b/P3(탐색)는 v1 미구현(주 가설 H3=P1a에 집중)
 - [ ] 이후 계획서 7장 일정 참조
 
 ## 구조
