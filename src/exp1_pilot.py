@@ -52,7 +52,10 @@ from step1_baseline import (  # noqa: E402
 RESULTS_DIR = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "results"
 )
-DEFAULT_OUT = os.path.join(RESULTS_DIR, "exp1_pilot.jsonl")
+# 설계 버전. 완료 판정·기록에 박아, prefix 길이 등 설계가 다른 옛 실행과
+# 절대 섞이지 않게 한다. prefix 함수 수를 바꾸면 이 값도 반드시 바꿀 것.
+DESIGN_VERSION = "v2_prefix12"
+DEFAULT_OUT = os.path.join(RESULTS_DIR, "exp1_pilot_v2.jsonl")
 DEFAULT_MODEL = "Qwen/Qwen2.5-Coder-3B-Instruct"
 
 # prefix 고정 4함수. camel/snake 는 함수명만 다르고 본문은 완전히 동일하다.
@@ -253,8 +256,12 @@ def load_done(out_path):
                 continue
             try:
                 r = json.loads(line)
-                done.add((r["instruction"], r["violation_count"], r["seed"]))
+                # 완료 키에 설계 버전과 모델을 포함 — 설계·모델이 다른 실행은
+                # 같은 (instruction, V, seed)라도 별개로 취급한다.
+                done.add((r["design_version"], r["model"],
+                          r["instruction"], r["violation_count"], r["seed"]))
             except (json.JSONDecodeError, KeyError):
+                # design_version 없는 옛 레코드는 KeyError → 완료로 안 침 (섞임 방지)
                 continue
     return done
 
@@ -318,6 +325,8 @@ def run_session(model, tokenizer, instruction, violation_count, seed, args, torc
         })
 
     return {
+        "design_version": DESIGN_VERSION,
+        "prefix_size": len(PREFIX_FUNCS),
         "model": model.name_or_path,
         "instruction": instruction,
         "violation_count": violation_count,
@@ -334,14 +343,23 @@ def run_session(model, tokenizer, instruction, violation_count, seed, args, torc
 def print_summary(out_path, instructions, violations):
     if not os.path.exists(out_path):
         return
+    # 현재 설계 버전(DESIGN_VERSION) 레코드만 집계 — 옛 설계·다른 파일 섞임 방지
     rows = []
     with open(out_path) as f:
         for line in f:
             line = line.strip()
-            if line:
-                rows.append(json.loads(line))
+            if not line:
+                continue
+            r = json.loads(line)
+            if r.get("design_version") == DESIGN_VERSION:
+                rows.append(r)
     if not rows:
+        print(f"(design_version={DESIGN_VERSION} 레코드 없음: {out_path})")
         return
+
+    models = sorted({r["model"].split("/")[-1] for r in rows})
+    if len(models) > 1:
+        print(f"주의: 여러 모델이 섞여 있음 {models} — 아래 표는 합산이다.")
 
     # (instruction, V) → 위치1 준수 리스트
     cell = {}
@@ -349,7 +367,8 @@ def print_summary(out_path, instructions, violations):
         k = (r["instruction"], r["violation_count"])
         cell.setdefault(k, []).append(r["position1_compliant"])
 
-    print("\n=== 실험1 파일럿 요약 (3B, python camelCase / 위치1 준수율) ===")
+    print(f"\n=== 실험1 파일럿 요약 [{DESIGN_VERSION}] "
+          f"{'/'.join(models)}, python camelCase / 위치1 준수율 ===")
     print("행=지침강도, 열=Vk(prefix 내 snake 함수 수). 값 = 첫 함수 camelCase 준수율%(세션수)\n")
     header = "  {:8s}".format("지침")
     for v in violations:
@@ -429,7 +448,7 @@ def main():
         for instr in args.instructions
         for v in args.violations
         for s in seeds
-        if (instr, v, s) not in done
+        if (DESIGN_VERSION, args.model, instr, v, s) not in done
     ]
     print(f"완료 {len(done)}개, 남은 {len(pending)}개 세션")
     if not pending:
