@@ -106,6 +106,104 @@ PREFIX_FUNCS = [
             "    return token.expires_at > now()"
         ),
     },
+    {
+        "camel": (
+            "def parseJsonPayload(raw):\n"
+            '    """Decode a JSON request body into a dict."""\n'
+            "    return json.loads(raw)"
+        ),
+        "snake": (
+            "def parse_json_payload(raw):\n"
+            '    """Decode a JSON request body into a dict."""\n'
+            "    return json.loads(raw)"
+        ),
+    },
+    {
+        "camel": (
+            "def buildQueryString(params):\n"
+            '    """Join params into a URL query string."""\n'
+            "    return '&'.join(f'{k}={v}' for k, v in params.items())"
+        ),
+        "snake": (
+            "def build_query_string(params):\n"
+            '    """Join params into a URL query string."""\n'
+            "    return '&'.join(f'{k}={v}' for k, v in params.items())"
+        ),
+    },
+    {
+        "camel": (
+            "def hashPassword(password):\n"
+            '    """Return the SHA-256 hex digest of a password."""\n'
+            "    return sha256(password.encode()).hexdigest()"
+        ),
+        "snake": (
+            "def hash_password(password):\n"
+            '    """Return the SHA-256 hex digest of a password."""\n'
+            "    return sha256(password.encode()).hexdigest()"
+        ),
+    },
+    {
+        "camel": (
+            "def loadConfigFile(path):\n"
+            '    """Read and parse a config file from disk."""\n'
+            "    with open(path) as f:\n"
+            "        return json.load(f)"
+        ),
+        "snake": (
+            "def load_config_file(path):\n"
+            '    """Read and parse a config file from disk."""\n'
+            "    with open(path) as f:\n"
+            "        return json.load(f)"
+        ),
+    },
+    {
+        "camel": (
+            "def mergeDictionaries(a, b):\n"
+            '    """Merge two dicts, second wins on conflicts."""\n'
+            "    return {**a, **b}"
+        ),
+        "snake": (
+            "def merge_dictionaries(a, b):\n"
+            '    """Merge two dicts, second wins on conflicts."""\n'
+            "    return {**a, **b}"
+        ),
+    },
+    {
+        "camel": (
+            "def filterActiveUsers(users):\n"
+            '    """Keep only users whose account is active."""\n'
+            "    return [u for u in users if u.active]"
+        ),
+        "snake": (
+            "def filter_active_users(users):\n"
+            '    """Keep only users whose account is active."""\n'
+            "    return [u for u in users if u.active]"
+        ),
+    },
+    {
+        "camel": (
+            "def serializeResponse(obj):\n"
+            '    """Encode a response object as a JSON string."""\n'
+            "    return json.dumps(obj)"
+        ),
+        "snake": (
+            "def serialize_response(obj):\n"
+            '    """Encode a response object as a JSON string."""\n'
+            "    return json.dumps(obj)"
+        ),
+    },
+    {
+        "camel": (
+            "def validateInputSchema(data, schema):\n"
+            '    """Check that data matches the expected schema keys."""\n'
+            "    return set(schema).issubset(data)"
+        ),
+        "snake": (
+            "def validate_input_schema(data, schema):\n"
+            '    """Check that data matches the expected schema keys."""\n'
+            "    return set(schema).issubset(data)"
+        ),
+    },
 ]
 
 BASE_SYSTEM = (
@@ -114,11 +212,13 @@ BASE_SYSTEM = (
     "and nothing else."
 )
 
-# 지침 강도 3단계. baseline(V0)을 천장에서 떼어낼 수 있는지 보려는 축.
+# 지침 강도 4단계. baseline(V0)을 천장에서 떼어낼 수 있는지 보려는 축.
 INSTRUCTION_RULE = {
     # 규칙 없음 — 순수 관습 baseline (Python이면 snake → camel 준수율 바닥 예상)
     "none": "",
-    # 약한 지침 — 평범하게 한 문장
+    # 초약(mention) — 명령이 아니라 서술. '지나가듯 언급' 수준
+    "mention": " This project generally follows camelCase naming for functions.",
+    # 약한 지침 — 평범한 명령 한 문장
     "weak": " Use camelCase for function names.",
     # 강한 지침 — Step 1과 동일하게 세게 박음 (천장 예상, 대조용)
     "strong": (
@@ -250,7 +350,7 @@ def print_summary(out_path, instructions, violations):
         cell.setdefault(k, []).append(r["position1_compliant"])
 
     print("\n=== 실험1 파일럿 요약 (3B, python camelCase / 위치1 준수율) ===")
-    print("행=지침강도, 열=위반개수(V0..V3). 값 = 첫 함수 camelCase 준수율%(세션수)\n")
+    print("행=지침강도, 열=Vk(prefix 내 snake 함수 수). 값 = 첫 함수 camelCase 준수율%(세션수)\n")
     header = "  {:8s}".format("지침")
     for v in violations:
         header += "  {:^9s}".format(f"V{v}")
@@ -292,9 +392,9 @@ def _interpret(rates):
 def main():
     ap = argparse.ArgumentParser(description="실험1 축소 파일럿 (3B, 지침강도×위반개수)")
     ap.add_argument("--model", default=DEFAULT_MODEL)
-    ap.add_argument("--instructions", nargs="+", default=["none", "weak", "strong"],
-                    choices=["none", "weak", "strong"])
-    ap.add_argument("--violations", nargs="+", type=int, default=[0, 1, 2, 3])
+    ap.add_argument("--instructions", nargs="+", default=["mention", "weak", "none"],
+                    choices=["none", "mention", "weak", "strong"])
+    ap.add_argument("--violations", nargs="+", type=int, default=[0, 2, 4, 8, 12])
     ap.add_argument("--n-seeds", type=int, default=5, help="조합당 세션(seed) 수")
     ap.add_argument("--base-seed", type=int, default=0)
     ap.add_argument("--n-targets", type=int, default=3, help="prefix 뒤 생성 함수 수(주지표=1)")
@@ -306,6 +406,10 @@ def main():
     args = ap.parse_args()
 
     os.makedirs(RESULTS_DIR, exist_ok=True)
+
+    max_v = len(PREFIX_FUNCS)
+    if any(v < 0 or v > max_v for v in args.violations):
+        ap.error(f"--violations 는 0~{max_v} (prefix 함수 수) 범위여야 한다: {args.violations}")
 
     if args.summary_only:
         print_summary(args.out, args.instructions, args.violations)
