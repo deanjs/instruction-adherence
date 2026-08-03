@@ -1,11 +1,19 @@
 """
-Step 0 — 개입 실험용 함수명 pair 토큰 수 일치 수율 측정
+Step 0 — 개입 실험용 함수명 pair 토큰 수 일치 수율 측정 (v2)
 
-3단계 개입 실험은 준수/위반 두 조건의 토큰 위치가 정확히 일치해야만 가능하다.
-`getUserData` 와 `get_user_data` 가 같은 토큰 수로 쪼개지는 비율을 먼저 잰다.
-이 수율이 너무 낮으면 개입 실험 설계 자체를 바꿔야 한다.
+3단계 개입 실험은 준수/위반 두 조건의 토큰 위치가 정확히 일치해야만 성립한다.
+`getUserData` / `get_user_data` 가 같은 토큰 수로 쪼개지는 비율을 측정한다.
 
-GPU 불필요. tokenizer만 받으면 CPU에서 수 초.
+v1에서 prefix를 따로 tokenize해 앞부분 보존을 요구했는데, 이는 잘못이다.
+Qwen BPE는 공백을 뒤 단어에 붙이므로 `"\\ndef "` 를 단독 tokenize한 결과가
+`"\\ndef getUserData"` 의 앞부분과 일치하지 않는다. 실제 실험에서는 전체
+문자열을 한 번에 tokenize하므로, 두 전체 시퀀스를 직접 비교하는 것이 맞다.
+
+개입에 필요한 조건:
+  1. 두 시퀀스의 총 토큰 수가 같다
+  2. 갈리기 전까지의 토큰이 완전히 동일하다 (결정 지점 인덱스가 같다)
+
+GPU 불필요.
 
 usage:
   python src/step0_pair_yield.py
@@ -21,10 +29,10 @@ from collections import Counter
 from transformers import AutoTokenizer
 
 DEFAULT_MODEL = "Qwen/Qwen2.5-Coder-7B-Instruct"
-RESULTS_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "results")
+RESULTS_DIR = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "results"
+)
 
-# 이름 풀의 대용. 최종적으로는 대상 저장소의 기존 모듈에서 추출한
-# 명세 목록으로 교체한다 (계획서 5.3 "생성물 고정").
 VERBS = [
     "get", "fetch", "create", "update", "delete", "list", "validate",
     "parse", "build", "send", "load", "save", "find", "check", "render",
@@ -39,12 +47,17 @@ NOUN_GROUPS = [
     ["order", "history"], ["billing", "record"], ["auth", "header"],
 ]
 
-# 결정 지점 직전 context.
-# BPE는 경계를 넘어 병합되므로 이름만 따로 tokenize한 결과와 다를 수 있다.
 CONTEXTS = {
     "bare": "",
     "def": "\ndef ",
     "def_in_class": "\nclass OrderService:\n    def ",
+    "with_code": (
+        "\nfrom typing import Any\n\n\n"
+        "def loadConfig(path: str) -> dict[str, Any]:\n"
+        "    with open(path) as f:\n"
+        "        return json.load(f)\n\n\n"
+        "def "
+    ),
 }
 
 
@@ -56,24 +69,41 @@ def snake(verb, nouns):
     return "_".join([verb] + nouns)
 
 
-def tokenize_span(tok, prefix, name):
-    """prefix + name 에서 name이 차지하는 토큰 구간.
-
-    prefix 토큰열이 그대로 보존되지 않으면(경계 병합) None을 반환한다.
-    결정 지점 인덱스가 정의되지 않는다는 뜻이므로 개입에 쓸 수 없다.
-    """
-    base = tok(prefix, add_special_tokens=False).input_ids
-    full = tok(prefix + name, add_special_tokens=False).input_ids
-    if full[: len(base)] != base:
-        return None
-    return full[len(base):]
-
-
 def first_divergence(a, b):
     i = 0
     while i < min(len(a), len(b)) and a[i] == b[i]:
         i += 1
     return i
+
+
+def compare_pair(tok, prefix, name_c, name_v):
+    """두 전체 문자열을 tokenize해 개입 가능 여부를 판정.
+
+    반환 None이면 토큰 수 불일치로 개입에 쓸 수 없다.
+    """
+    ids_c = tok(prefix + name_c, add_special_tokens=False).input_ids
+    ids_v = tok(prefix + name_v, add_special_tokens=False).input_ids
+
+    if len(ids_c) != len(ids_v):
+        return None
+
+    d = first_divergence(ids_c, ids_v)
+    if d == len(ids_c):  # 완전히 동일 — 있을 수 없지만 방어
+        return None
+
+    # 갈린 뒤 정확히 한 토큰만 다르면 보조 지표(계획서 3.5) 대상
+    single = ids_c[d + 1:] == ids_v[d + 1:]
+
+    return {
+        "camel": name_c,
+        "snake": name_v,
+        "total_tokens": len(ids_c),
+        "decision_index": d,       # 결정 지점 = 처음 갈리는 위치
+        "name_span": len(ids_c) - d,
+        "single_token_divergence": single,
+        "camel_ids": ids_c[d:],
+        "snake_ids": ids_v[d:],
+    }
 
 
 def main():
@@ -89,67 +119,53 @@ def main():
 
     os.makedirs(RESULTS_DIR, exist_ok=True)
     summary = {}
+    matched_for_export = []
 
     for ctx_label, prefix in CONTEXTS.items():
-        matched, merged, mismatched = [], 0, Counter()
-        single_token_divergence = 0
+        matched, mismatched = [], Counter()
 
         for verb, nouns in names:
-            c_name, v_name = camel(verb, nouns), snake(verb, nouns)
-            c_ids = tokenize_span(tok, prefix, c_name)
-            v_ids = tokenize_span(tok, prefix, v_name)
-
-            if c_ids is None or v_ids is None:
-                merged += 1
+            r = compare_pair(tok, prefix, camel(verb, nouns), snake(verb, nouns))
+            if r is None:
+                c = len(tok(prefix + camel(verb, nouns), add_special_tokens=False).input_ids)
+                v = len(tok(prefix + snake(verb, nouns), add_special_tokens=False).input_ids)
+                mismatched[(c - v)] += 1
                 continue
-
-            if len(c_ids) != len(v_ids):
-                mismatched[(len(c_ids), len(v_ids))] += 1
-                continue
-
-            matched.append({
-                "camel": c_name,
-                "snake": v_name,
-                "n_tokens": len(c_ids),
-                "camel_ids": c_ids,
-                "snake_ids": v_ids,
-            })
-
-            # 보조 지표(계획서 3.5): 정확히 한 토큰에서만 갈리는 비율
-            d = first_divergence(c_ids, v_ids)
-            if c_ids[d + 1:] == v_ids[d + 1:]:
-                single_token_divergence += 1
+            matched.append(r)
 
         total = len(names)
         rate = len(matched) / total * 100
+        n_single = sum(m["single_token_divergence"] for m in matched)
+
         print(f"[context = {ctx_label!r}]")
-        print(f"  토큰 수 일치     : {len(matched)}/{total}  ({rate:.1f}%)")
-        print(f"  prefix 경계 병합 : {merged}")
-        print(f"  단일 토큰 분기   : {single_token_divergence}"
-              f" (매칭분의 {single_token_divergence / max(len(matched), 1) * 100:.1f}%)")
+        print(f"  토큰 수 일치   : {len(matched)}/{total}  ({rate:.1f}%)")
+        print(f"  단일 토큰 분기 : {n_single}"
+              f" (매칭분의 {n_single / max(len(matched), 1) * 100:.1f}%)")
         if mismatched:
-            print(f"  불일치 패턴 (camel, snake): {mismatched.most_common(5)}")
+            print(f"  길이 차이 분포 (camel − snake): {dict(mismatched.most_common(5))}")
         print(f"  → 500쌍 확보에 필요한 후보 풀: 약 {int(500 / max(rate / 100, 1e-9))}개\n")
 
         summary[ctx_label] = {
             "n_candidates": total,
             "n_matched": len(matched),
             "match_rate_pct": round(rate, 2),
-            "n_boundary_merged": merged,
-            "n_single_token_divergence": single_token_divergence,
+            "n_single_token_divergence": n_single,
         }
 
         if ctx_label == "def":
-            out = os.path.join(RESULTS_DIR, "matched_pairs.json")
-            with open(out, "w") as f:
-                json.dump(matched, f, indent=2, ensure_ascii=False)
-            print(f"  저장: {out} ({len(matched)}쌍)\n")
+            matched_for_export = matched
+
+    # 실험 환경에 가장 가까운 'def' 기준으로 저장
+    out = os.path.join(RESULTS_DIR, "matched_pairs.json")
+    with open(out, "w") as f:
+        json.dump(matched_for_export, f, indent=2, ensure_ascii=False)
+    print(f"저장: {out} ({len(matched_for_export)}쌍)\n")
 
     # 선별 표본 편향 확인 (계획서 3.6)
     print("=== 선별 표본 편향 확인 ===")
     all_names = [camel(v, n) for v, n in names]
-    matched_names = [m["camel"] for m in matched]
-    for label, pool in [("전체 후보", all_names), ("선별 후보", matched_names)]:
+    sel_names = [m["camel"] for m in matched_for_export]
+    for label, pool in [("전체 후보", all_names), ("선별 후보", sel_names)]:
         if pool:
             avg = sum(len(x) for x in pool) / len(pool)
             print(f"  {label}: n={len(pool)}, 평균 문자 길이 {avg:.1f}")
