@@ -1019,6 +1019,237 @@ def run_content(args):
 
 
 # ─────────────────────────────────────────────────────────────
+# 2×2 지침 뒤집기 (--content2x2) — "snake 토큰 특성" vs "지침 위반 상태" 분리
+#
+# 내용-분리(--content)는 camelCase 지침 고정이라 snake=위반이 붙어 있었다.
+# 지침을 camelCase / snake_case 두 방향으로 돌려, 각 방향에서 이름 토큰 attention을 잰다.
+#   지침       camel 이름   snake 이름
+#   camelCase   준수          위반
+#   snake_case  위반          준수
+# 분해(한 대응 관측):
+#   Δ_A = (camelCase 지침) snake − camel   [snake=위반]
+#   Δ_B = (snake_case 지침) snake − camel   [camel=위반]
+#   토큰-identity 효과 = (Δ_A + Δ_B)/2  (지침 뒤집어도 살아남는 snake 성향)
+#   위반-상태 효과     = (Δ_A − Δ_B)/2  (이름스타일 × 지침 상호작용)
+# filler도 지침 따라 뒤집어(항상 지침 준수) 두 셀을 대칭으로.
+# ─────────────────────────────────────────────────────────────
+
+DESIGN_VERSION_2X2 = "stage2_flip2x2_v1"
+DEFAULT_2X2_OUT = os.path.join(RESULTS_DIR, "stage2_flip2x2.jsonl")
+INSTR_RULE = {"camel": "Use camelCase for function names.",
+              "snake": "Use snake_case for function names."}
+
+
+def _content_system(instr_style):
+    return ("You are a senior Python engineer working in this project. "
+            "Respond with exactly one Python function inside a single ```python code block, "
+            "and nothing else. " + INSTR_RULE[instr_style])
+
+
+def build_2x2_prefix(pair, target_style, instr_style, seed, n_filler):
+    """filler는 instr_style(지침 준수), target 이름만 target_style. 반환 (prefix, target)."""
+    target = TARGET_BODY.format(name=pair[target_style])
+    pool = [f[instr_style] for f in PREFIX_FUNCS]
+    order = random.Random(seed).sample(range(len(pool)), min(n_filler, len(pool)))
+    fillers = [pool[i] for i in order]
+    slot = len(fillers) // 2
+    parts = fillers[:slot] + [target] + fillers[slot:]
+    return "\n\n\n".join(parts), target
+
+
+def _seg_for(tokenizer, prompt_text, target, name):
+    enc = tokenizer(prompt_text, return_offsets_mapping=True, add_special_tokens=False)
+    offsets, input_ids = enc["offset_mapping"], enc["input_ids"]
+    ct = prompt_text.find(target)
+    cn = prompt_text.find(name, ct)
+    seg = {"target_name": _char_span_to_tokens(offsets, cn, cn + len(name))}
+    return seg, input_ids, len(input_ids)
+
+
+def content2x2_session(model, tokenizer, torch, pair, pair_idx, seed, args):
+    spec_desc = "formats a value for display"
+    rec = {"design_version": DESIGN_VERSION_2X2, "model": model.name_or_path,
+           "pair_idx": pair_idx, "camel": pair["camel"], "snake": pair["snake"],
+           "seed": seed, "n_filler": args.n_filler,
+           "attn": {}, "vnorm": {}, "attn_by_layer": {}, "vnorm_by_layer": {}}
+
+    for instr in ("camel", "snake"):
+        built = {}
+        for tstyle in ("camel", "snake"):
+            prefix, target = build_2x2_prefix(pair, tstyle, instr, seed, args.n_filler)
+            messages = [
+                {"role": "system", "content": _content_system(instr)},
+                {"role": "user", "content": ("Here is the existing code in this project:\n\n"
+                                             f"```python\n{prefix}\n```\n\n"
+                                             f"Now add a function that {spec_desc}.")},
+            ]
+            pt = tokenizer.apply_chat_template(
+                messages, tokenize=False, add_generation_prompt=True) + "```python\ndef "
+            seg, ids, plen = _seg_for(tokenizer, pt, target, pair[tstyle])
+            built[tstyle] = dict(pt=pt, seg=seg, ids=ids, plen=plen)
+
+        # 셀 내 정렬: 이름 토큰만 달라야
+        a, b = built["camel"], built["snake"]
+        if len(a["ids"]) != len(b["ids"]):
+            return None, f"len_mismatch@{instr}"
+        diff = [i for i, (x, y) in enumerate(zip(a["ids"], b["ids"])) if x != y]
+        if a["seg"]["target_name"] != b["seg"]["target_name"] or \
+                set(diff) - set(a["seg"]["target_name"]):
+            return None, f"align_fail@{instr}"
+
+        ck = instr + "_instr"
+        rec["attn"][ck], rec["vnorm"][ck] = {}, {}
+        rec["attn_by_layer"][ck], rec["vnorm_by_layer"][ck] = {}, {}
+        for tstyle in ("camel", "snake"):
+            st = built[tstyle]
+            inputs = tokenizer(st["pt"], return_tensors="pt",
+                               add_special_tokens=False).to(model.device)
+            ctx_begin(st["seg"], st["plen"], value_norm=True, capture_prefill_last=True)
+            with torch.no_grad():
+                model(**inputs)
+            recs = ctx_end()
+
+            def bl(field):
+                return {r["layer"]: r[field].get("target_name")
+                        for r in recs if "target_name" in r[field]}
+            an, vn = bl("seg"), bl("seg_vnorm")
+            av = [v for v in an.values() if v is not None]
+            vv = [v for v in vn.values() if v is not None]
+            rec["attn"][ck][tstyle] = sum(av) / len(av) if av else None
+            rec["vnorm"][ck][tstyle] = sum(vv) / len(vv) if vv else None
+            rec["attn_by_layer"][ck][tstyle] = an
+            rec["vnorm_by_layer"][ck][tstyle] = vn
+    return rec, None
+
+
+def _decomp(rec, metric):
+    """한 레코드 → (토큰-identity, 위반-상태) 성분. 값 없으면 None."""
+    a = rec[metric].get("camel_instr", {})
+    b = rec[metric].get("snake_instr", {})
+    if None in (a.get("camel"), a.get("snake"), b.get("camel"), b.get("snake")):
+        return None
+    dA = a["snake"] - a["camel"]        # camelCase 지침: snake=위반
+    dB = b["snake"] - b["camel"]        # snake_case 지침: camel=위반
+    return (dA + dB) / 2, (dA - dB) / 2  # (토큰-identity, 위반-상태)
+
+
+def print_content2x2_summary(out_path):
+    rows = []
+    if os.path.exists(out_path):
+        with open(out_path) as f:
+            for line in f:
+                line = line.strip()
+                if line:
+                    r = json.loads(line)
+                    if r.get("design_version") == DESIGN_VERSION_2X2:
+                        rows.append(r)
+    if not rows:
+        print(f"(design_version={DESIGN_VERSION_2X2} 레코드 없음: {out_path})")
+        return
+
+    def clustered(pairs_vals):
+        byp = {}
+        for pid, v in pairs_vals:
+            byp.setdefault(pid, []).append(v)
+        pm = [sum(vs) / len(vs) for vs in byp.values()]
+        m = sum(pm) / len(pm)
+        if len(pm) < 2:
+            return m, None, len(pm)
+        var = sum((x - m) ** 2 for x in pm) / (len(pm) - 1)
+        return m, (var / len(pm)) ** 0.5, len(pm)
+
+    n_pairs = len({r["pair_idx"] for r in rows})
+    print(f"\n=== 2단계 지침 뒤집기 2×2 [{DESIGN_VERSION_2X2}] "
+          f"/ snake-토큰 vs 위반-상태 분리 ===")
+    print(f"{len(rows)}개 대응 관측 = 이름쌍 {n_pairs} × 문맥 seed (관측당 4 forward).")
+    print("토큰-identity = (Δ_A+Δ_B)/2 (지침 뒤집어도 남는 snake 성향)")
+    print("위반-상태     = (Δ_A−Δ_B)/2 (지침과 충돌하는 이름을 더 보는 정도) — 이게 핵심\n")
+
+    for metric, label in [("attn", "raw attention"),
+                          ("vnorm", "output projection 이전 ‖αv‖")]:
+        tok, viol = [], []
+        for r in rows:
+            d = _decomp(r, metric)
+            if d is None:
+                continue
+            tok.append((r["pair_idx"], d[0]))
+            viol.append((r["pair_idx"], d[1]))
+        if not tok:
+            print(f"  [{label}]: (데이터 없음)\n")
+            continue
+        mt, st, _ = clustered(tok)
+        mv, sv, k = clustered(viol)
+        print(f"  [{label}]  (이름쌍 {k} clustered)")
+        tt = f"{mt/st:+.1f}" if st else "--"
+        vt = f"{mv/sv:+.1f}" if sv else "--"
+        print(f"     토큰-identity Δ = {mt:+.5f}  (SE {st or 0:.5f}, t≈{tt})")
+        print(f"     위반-상태    Δ = {mv:+.5f}  (SE {sv or 0:.5f}, t≈{vt})")
+        verdict = ("위반-상태 효과 있음(지침과 충돌하는 이름을 더 봄)"
+                   if sv and abs(mv / sv) >= 2 and mv > 0
+                   else "위반-상태 효과 뚜렷하지 않음 → 대부분 snake-토큰 특성")
+        print(f"     → {verdict}\n")
+    print("  ※ t는 이름쌍 clustered 기술값 — 문맥 seed 확대·bootstrap으로 확정 필요.")
+    print("  ※ 위반-상태 Δ>0 유의 = attention이 '위반이라서' 높아진다는 첫 분리 증거(상관).")
+
+
+def run_content2x2(args):
+    os.makedirs(os.path.dirname(os.path.abspath(args.out)), exist_ok=True)
+    if args.summary_only:
+        print_content2x2_summary(args.out)
+        return
+
+    import torch
+    from transformers import AutoModelForCausalLM, AutoTokenizer
+
+    model_id = args.model or OBSERVE_MODEL
+    if not torch.cuda.is_available():
+        sys.exit("CUDA 없음 — Colab을 GPU 런타임(T4)으로 바꿔라.")
+    if "int8" in model_id.lower() or "4bit" in model_id.lower():
+        sys.exit("양자화 모델 금지(CLAUDE.md).")
+
+    register_attention()
+    pairs = _load_pairs(single_token_only=not args.all_pairs)[: args.n_pairs]
+    seeds = [args.base_seed + k for k in range(args.n_seeds)]
+
+    done = set()
+    if os.path.exists(args.out):
+        with open(args.out) as f:
+            for line in f:
+                line = line.strip()
+                if line:
+                    try:
+                        r = json.loads(line)
+                        done.add((r["design_version"], r["model"],
+                                  r["pair_idx"], r["seed"]))
+                    except (json.JSONDecodeError, KeyError):
+                        continue
+    pending = [(pi, s) for pi in range(len(pairs)) for s in seeds
+               if (DESIGN_VERSION_2X2, model_id, pi, s) not in done]
+    print(f"pair {len(pairs)} × seed {len(seeds)} = {len(pairs)*len(seeds)} 대응 관측 "
+          f"(관측당 4 forward), 남은 {len(pending)}")
+    if not pending:
+        print_content2x2_summary(args.out)
+        return
+
+    print(f"[{model_id}] 로드 중 (attn_implementation={ATTN_NAME}, fp16)...")
+    tokenizer = AutoTokenizer.from_pretrained(model_id)
+    model = AutoModelForCausalLM.from_pretrained(
+        model_id, torch_dtype=torch.float16, device_map="auto",
+        attn_implementation=ATTN_NAME).eval()
+
+    n_ok, skip = 0, {}
+    for pi, s in pending:
+        rec, why = content2x2_session(model, tokenizer, torch, pairs[pi], pi, s, args)
+        if rec is None:
+            skip[why] = skip.get(why, 0) + 1
+            continue
+        append_jsonl(args.out, rec)
+        n_ok += 1
+    print(f"기록 {n_ok}. 정렬 폐기: {skip or '없음'}")
+    print_content2x2_summary(args.out)
+
+
+# ─────────────────────────────────────────────────────────────
 
 def main():
     ap = argparse.ArgumentParser(description="2단계 attention 관측 (NIAR)")
@@ -1028,6 +1259,8 @@ def main():
     mode.add_argument("--observe", action="store_true", help="NIAR 관측 실행")
     mode.add_argument("--content", action="store_true",
                       help="내용-분리 측정: matched pair로 위치·길이 고정, 이름만 snake↔camel")
+    mode.add_argument("--content2x2", action="store_true",
+                      help="지침 뒤집기 2×2: snake-토큰 특성 vs 지침 위반 상태 분리")
 
     ap.add_argument("--model", default=None, help="기본: 관측·내용=3B, 검증=1.5B")
     # 관측
@@ -1062,9 +1295,12 @@ def main():
 
     args = ap.parse_args()
     if args.out is None:
-        args.out = DEFAULT_CONTENT_OUT if args.content else DEFAULT_OUT
+        args.out = (DEFAULT_2X2_OUT if args.content2x2 else
+                    DEFAULT_CONTENT_OUT if args.content else DEFAULT_OUT)
     if args.validate:
         run_validate(args)
+    elif args.content2x2:
+        run_content2x2(args)
     elif args.content:
         run_content(args)
     else:

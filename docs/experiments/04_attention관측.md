@@ -171,3 +171,19 @@ filler 코드 구성·순서를 바꾸는 문맥 seed.** 측정 = **naming step*
   attention·`‖αv‖`가 약 +18% — **잠정**(반복측정 SE·위반/토큰 분리·층 선정 모두 미완).
 - 다음: (a) clustered/bootstrap SE + 문맥 seed 확대, (b) **지침 뒤집기(2×2)**로 위반 vs 토큰 분리,
   (c) 층별 snake−camel로 개입 후보 층 선정.
+
+### (하네스) 지침 뒤집기 2×2 — `--content2x2` 구현 완료, 실행 대기
+
+`src/stage2_attention.py --content2x2`. 각 이름쌍·문맥 seed에서 **4 forward**:
+{camelCase 지침, snake_case 지침} × {camel 이름, snake 이름}. filler도 지침 따라 뒤집어 대칭.
+
+    지침         camel 이름   snake 이름
+    camelCase     준수          위반
+    snake_case    위반          준수
+
+- Δ_A = (camelCase) snake−camel,  Δ_B = (snake_case) snake−camel.
+- **토큰-identity = (Δ_A+Δ_B)/2** (지침 뒤집어도 남는 snake 성향)
+- **위반-상태 = (Δ_A−Δ_B)/2** (이름스타일 × 지침 상호작용 = "위반이라서")
+- 이름쌍 clustered t로 보고. `results/stage2_flip2x2.jsonl`.
+- 판정: 위반-상태 Δ>0 유의 → "위반이라서 더 본다" 첫 분리 증거(상관). 토큰-identity만 크면 저수준 토큰 효과.
+- 합성 데이터 스모크로 분해 검증(토큰 시나리오→토큰만, 위반 시나리오→위반만). Colab 실행 대기.
