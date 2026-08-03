@@ -435,6 +435,11 @@ def _logprob(model, torch, prefix_kv, prefix_len, trigger_id, cand_ids):
     입력 = [trigger] + cand[:-1]  → 로짓 T개가 cand[0..T-1]을 예측.
     개입은 _IVX가 켜져 있으면 이 forward의 모든 query 위치(결정 지점 + teacher-forcing
     step 전부)에 동일 적용된다(계획서 3.6).
+
+    **주의:** prefix 길이(prefix_len)와 query 길이(T)가 달라, SDPA `is_causal`에 맡기면
+    좌상단 정렬 마스킹이 돼 후보가 prefix를 제대로 못 본다(→ 점수가 prefix에 무감각).
+    그래서 **명시적 attention_mask(1, prefix_len+T)를 넘겨** HF가 올바른 4D causal 마스크
+    (후보가 전체 prefix + 후보 내 causal)를 만들어 커스텀 forward에 전달하게 한다.
     """
     import torch.nn.functional as F
     cache = _make_cache(prefix_kv)
@@ -443,9 +448,11 @@ def _logprob(model, torch, prefix_kv, prefix_len, trigger_id, cand_ids):
     T = len(cand_ids)
     cache_pos = torch.arange(prefix_len, prefix_len + T, device=model.device)
     pos_ids = cache_pos.unsqueeze(0)
+    attn_mask = torch.ones((1, prefix_len + T), dtype=torch.long, device=model.device)
     with torch.no_grad():
         out = model(input_ids=inp, past_key_values=cache, use_cache=True,
-                    position_ids=pos_ids, cache_position=cache_pos)
+                    position_ids=pos_ids, cache_position=cache_pos,
+                    attention_mask=attn_mask)
     logits = out.logits[0]                        # (T, V)
     lp = 0.0
     for i, t in enumerate(cand_ids):
