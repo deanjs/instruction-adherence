@@ -48,6 +48,8 @@ context에 누적된 이전 코드를 규칙보다 우선해서 참조하기 때
   - 결과: `results/matched_pairs.json`, `results/step0_summary.json`
 - [ ] **Step 1** — 기저 준수율 smoke test (계획서 5.5 게이트: 55~85%)
 - [ ] **Step 2** — `AttentionInterface` 조건부 함수 + 512 토큰 eager 대조 검증
+  - 하네스 구현 완료: `src/stage2_attention.py`(`--validate`/`--observe`), `notebooks/stage2_colab.ipynb`
+  - **Colab에서 `--validate` PASS 확인 후** 관측(`--observe`) 진행 — 그 전엔 미완료
 - [ ] 이후 계획서 7장 일정 참조
 
 ## 구조
