@@ -326,24 +326,29 @@ def print_summary(out_path):
     if not rows:
         return
 
-    print("\n=== 요약 (계획서 5.5 게이트: 55~85%) ===")
+    print("\n=== 요약 (계획서 5.5 게이트: 준수율 55~85%, 완주율 ≥95%) ===")
     groups = {}
     for r in rows:
         groups.setdefault((r["model"], r["cell"]), []).append(r)
 
     for (model, cell), rs in sorted(groups.items()):
-        # 전체 준수율: 판정된 함수 전부에 대한 마이크로 평균
+        # 완주율: 시도한 함수 중 이름 추출에 성공한(채점 가능한) 비율.
+        # 계획서 5.5의 'H1 완주율 ≥95%' 게이트에 대응. n_judged/n_functions.
+        tot_n = sum(x["n_functions"] for x in rs)
         tot_j = sum(x["n_judged"] for x in rs)
+        completion = (tot_j / tot_n * 100) if tot_n else float("nan")
+        # 전체 준수율: 판정된 함수 전부에 대한 마이크로 평균
         tot_c = sum(x["n_compliant"] for x in rs)
         overall = (tot_c / tot_j * 100) if tot_j else float("nan")
         # 위치 1 준수율: 주 지표
         p1 = [x["position1_compliant"] for x in rs if x["position1_name"] is not None]
         p1_rate = (sum(p1) / len(p1) * 100) if p1 else float("nan")
         gate = "PASS" if 55 <= overall <= 85 else ("천장" if overall > 85 else "바닥")
+        warn = "" if not (completion < 95) else "  ⚠완주<95"
         short = model.split("/")[-1]
         print(f"  {short:32s} {cell:14s} "
-              f"전체 {overall:5.1f}%  위치1 {p1_rate:5.1f}%  "
-              f"(n={len(rs)}세션) [{gate}]")
+              f"완주 {completion:5.1f}%  전체 {overall:5.1f}%  위치1 {p1_rate:5.1f}%  "
+              f"(n={len(rs)}세션) [{gate}]{warn}")
 
 
 # ─────────────────────────────────────────────────────────────
