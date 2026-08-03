@@ -858,44 +858,106 @@ def print_content_summary(out_path):
         print(f"(design_version={DESIGN_VERSION_CONTENT} 레코드 없음: {out_path})")
         return
 
-    def paired(rows, metric):
-        d = []
+    def diffs(rows, metric):
+        out = []
         for r in rows:
             c, s = r[metric]["camel"], r[metric]["snake"]
             if c is not None and s is not None:
-                d.append(s - c)                       # snake(위반) − camel(준수)
-        return d
+                out.append((r.get("pair_idx"), s - c))     # (이름쌍, snake−camel)
+        return out
 
-    def stat(xs):
-        if not xs:
-            return None
-        m = sum(xs) / len(xs)
-        var = sum((x - m) ** 2 for x in xs) / len(xs)
-        se = (var / len(xs)) ** 0.5
-        return m, se, len(xs)
+    def naive_se(vals):
+        m = sum(vals) / len(vals)
+        var = sum((x - m) ** 2 for x in vals) / len(vals)
+        return m, (var / len(vals)) ** 0.5
+
+    def clustered_se(pairs_vals):
+        """이름쌍으로 묶은 SE — 같은 이름쌍의 seed 반복은 독립이 아니므로.
+        이름쌍별 평균을 1관측으로 보고 그들 사이 SE(cluster 수 기준)."""
+        byp = {}
+        for pid, v in pairs_vals:
+            byp.setdefault(pid, []).append(v)
+        pair_means = [sum(vs) / len(vs) for vs in byp.values()]
+        m = sum(pair_means) / len(pair_means)
+        if len(pair_means) < 2:
+            return m, None, len(pair_means)
+        var = sum((x - m) ** 2 for x in pair_means) / (len(pair_means) - 1)
+        return m, (var / len(pair_means)) ** 0.5, len(pair_means)
 
     print(f"\n=== 2단계 내용-분리 측정 [{DESIGN_VERSION_CONTENT}] "
-          f"/ 같은 위치·같은 길이, 이름만 snake↔camel ===")
-    print("naming step에서 target 이름 토큰에 준 attention. Δ = snake(위반) − camel(준수).\n")
+          f"/ 같은 위치·같은 길이, 이름 토큰만 snake↔camel ===")
+    n_pairs = len({r.get("pair_idx") for r in rows})
+    print(f"{len(rows)}개 대응 관측 = 이름쌍 {n_pairs} × filler 문맥 seed. "
+          f"Δ = snake − camel (이름 토큰).")
+    print("※ z는 기술 요약값(반복 측정 구조 미반영) — 확증 유의성 아님. "
+          "cluster SE(이름쌍 단위)를 함께 본다.\n")
     for metric, label in [("attn_name", "raw attention"),
-                          ("vnorm_name", "‖α·v‖ (Kobayashi)")]:
-        d = paired(rows, metric)
-        st = stat(d)
-        if st is None:
-            print(f"  {label:<20}: (데이터 없음)")
+                          ("vnorm_name", "output projection 이전 ‖αv‖ (Kobayashi에서 착안)")]:
+        dv = diffs(rows, metric)
+        if not dv:
+            print(f"  [{label}]: (데이터 없음)\n")
             continue
-        m, se, n = st
+        vals = [v for _, v in dv]
         cam = [r[metric]["camel"] for r in rows if r[metric]["camel"] is not None]
         sna = [r[metric]["snake"] for r in rows if r[metric]["snake"] is not None]
-        z = m / se if se > 0 else float("inf")
-        print(f"  [{label}]  n={n} pair·seed")
-        print(f"     camel(준수) 평균 {sum(cam)/len(cam):.4f} | "
-              f"snake(위반) 평균 {sum(sna)/len(sna):.4f}")
-        print(f"     Δ(snake−camel) = {m:+.4f} ± {se:.4f} (SE),  z≈{z:+.1f}")
-        print(f"     → {'위반 이름을 더 참조(양)' if m > 0 else '위반 이름을 덜/동일 참조'} "
-              f"{'*유의 가능*' if abs(z) >= 2 else '(약함)'}\n")
-    print("  ※ 길이·위치 고정 → 순수 내용(snake vs camel) 효과. 관측(--observe)의 구간 교란 제거.")
-    print("  ※ 여전히 상관·탐색적(H5/H6 주가설 아님). attention 크기 ≠ 인과(계획서 3.7).")
+        mn, se_n = naive_se(vals)
+        mc, se_c, k = clustered_se(dv)
+        print(f"  [{label}]")
+        print(f"     camel {sum(cam)/len(cam):.4f} → snake {sum(sna)/len(sna):.4f}  "
+              f"(약 {(sum(sna)/len(sna))/(sum(cam)/len(cam))*100-100:+.0f}%)")
+        print(f"     Δ = {mn:+.4f}")
+        print(f"       · naive SE(관측 {len(vals)}, 독립 가정) = {se_n:.4f} → z≈{mn/se_n:+.1f} (참고용)")
+        if se_c:
+            print(f"       · cluster SE(이름쌍 {k}) = {se_c:.4f} → t≈{mc/se_c:+.1f} "
+                  f"(반복 반영, 이쪽이 보수적)")
+        print()
+    print("  ⚠ 미완: (1) 이름쌍·문맥 bootstrap/혼합모형으로 SE 확정, "
+          "(2) 지침 뒤집기(2×2)로 위반 vs snake-토큰 분리, (3) 층별 분석으로 개입층 선정.")
+    print("  ※ 여전히 상관·탐색적. ‖αv‖는 output projection 이전 값. attention 크기 ≠ 인과.")
+
+    # ── 층별 snake−camel (개입 후보 층 선정용) ──
+    if any("attn_name_by_layer" in r for r in rows):
+        print_content_by_layer(rows)
+
+
+def print_content_by_layer(rows, top_n=8):
+    """이름쌍-clustered로 층별 Δ(snake−camel)를 계산. 교란 없는 2차 자료의 층 프로파일."""
+    def layer_diffs(metric):
+        per_layer = {}     # {layer: [(pair_idx, diff)]}
+        for r in rows:
+            byl = r.get(metric + "_by_layer")
+            if not byl:
+                continue
+            cam, sna = byl.get("camel", {}), byl.get("snake", {})
+            for L in cam:
+                if L in sna and cam[L] is not None and sna[L] is not None:
+                    per_layer.setdefault(int(L), []).append((r.get("pair_idx"), sna[L] - cam[L]))
+        return per_layer
+
+    def cluster(pairs_vals):
+        byp = {}
+        for pid, v in pairs_vals:
+            byp.setdefault(pid, []).append(v)
+        pm = [sum(vs) / len(vs) for vs in byp.values()]
+        m = sum(pm) / len(pm)
+        if len(pm) < 2:
+            return m, None
+        var = sum((x - m) ** 2 for x in pm) / (len(pm) - 1)
+        return m, (var / len(pm)) ** 0.5
+
+    print("\n  --- 층별 Δ(snake−camel), 이름쌍 clustered (개입 후보 층 선정) ---")
+    pl = layer_diffs("attn_name")
+    rank = []
+    for L, pv in pl.items():
+        m, se = cluster(pv)
+        rank.append((L, m, se))
+    rank.sort(key=lambda t: abs(t[1]), reverse=True)
+    print(f"    raw attention |Δ| 상위 {top_n}층:")
+    print(f"    {'층':>4} {'Δ':>9} {'clusterSE':>10} {'t':>6}")
+    for L, m, se in rank[:top_n]:
+        t = f"{m/se:+.1f}" if se else "--"
+        print(f"    L{L:<3d} {m:+9.4f} {se if se else 0:10.4f} {t:>6}")
+    print("    ※ 이 순위로 3단계 개입 후보 층을 정한다(1차 L20~32는 교란 있어 대체).")
 
 
 def run_content(args):
