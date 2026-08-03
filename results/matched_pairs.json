@@ -1,0 +1,4808 @@
+[
+  {
+    "camel": "getPayment",
+    "snake": "get_payment",
+    "total_tokens": 4,
+    "decision_index": 3,
+    "name_span": 1,
+    "single_token_divergence": true,
+    "camel_ids": [
+      20188
+    ],
+    "snake_ids": [
+      26696
+    ]
+  },
+  {
+    "camel": "getInvoice",
+    "snake": "get_invoice",
+    "total_tokens": 4,
+    "decision_index": 3,
+    "name_span": 1,
+    "single_token_divergence": true,
+    "camel_ids": [
+      34674
+    ],
+    "snake_ids": [
+      39225
+    ]
+  },
+  {
+    "camel": "getPaymentMethod",
+    "snake": "get_payment_method",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      20188,
+      3523
+    ],
+    "snake_ids": [
+      26696,
+      9032
+    ]
+  },
+  {
+    "camel": "getCacheEntry",
+    "snake": "get_cache_entry",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      8233,
+      5874
+    ],
+    "snake_ids": [
+      11529,
+      9078
+    ]
+  },
+  {
+    "camel": "getShippingAddress",
+    "snake": "get_shipping_address",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      43356,
+      4286
+    ],
+    "snake_ids": [
+      53553,
+      6744
+    ]
+  },
+  {
+    "camel": "getBillingRecord",
+    "snake": "get_billing_record",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      82007,
+      6471
+    ],
+    "snake_ids": [
+      87807,
+      14192
+    ]
+  },
+  {
+    "camel": "getAuthHeader",
+    "snake": "get_auth_header",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      5087,
+      4047
+    ],
+    "snake_ids": [
+      14014,
+      8757
+    ]
+  },
+  {
+    "camel": "fetchUser",
+    "snake": "fetch_user",
+    "total_tokens": 4,
+    "decision_index": 3,
+    "name_span": 1,
+    "single_token_divergence": true,
+    "camel_ids": [
+      1474
+    ],
+    "snake_ids": [
+      3317
+    ]
+  },
+  {
+    "camel": "fetchOrder",
+    "snake": "fetch_order",
+    "total_tokens": 4,
+    "decision_index": 3,
+    "name_span": 1,
+    "single_token_divergence": true,
+    "camel_ids": [
+      4431
+    ],
+    "snake_ids": [
+      7869
+    ]
+  },
+  {
+    "camel": "fetchSession",
+    "snake": "fetch_session",
+    "total_tokens": 4,
+    "decision_index": 3,
+    "name_span": 1,
+    "single_token_divergence": true,
+    "camel_ids": [
+      5283
+    ],
+    "snake_ids": [
+      12316
+    ]
+  },
+  {
+    "camel": "fetchToken",
+    "snake": "fetch_token",
+    "total_tokens": 4,
+    "decision_index": 3,
+    "name_span": 1,
+    "single_token_divergence": true,
+    "camel_ids": [
+      3323
+    ],
+    "snake_ids": [
+      6458
+    ]
+  },
+  {
+    "camel": "fetchPayment",
+    "snake": "fetch_payment",
+    "total_tokens": 4,
+    "decision_index": 3,
+    "name_span": 1,
+    "single_token_divergence": true,
+    "camel_ids": [
+      20188
+    ],
+    "snake_ids": [
+      26696
+    ]
+  },
+  {
+    "camel": "fetchInvoice",
+    "snake": "fetch_invoice",
+    "total_tokens": 4,
+    "decision_index": 3,
+    "name_span": 1,
+    "single_token_divergence": true,
+    "camel_ids": [
+      34674
+    ],
+    "snake_ids": [
+      39225
+    ]
+  },
+  {
+    "camel": "fetchUserOrder",
+    "snake": "fetch_user_order",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      1474,
+      4431
+    ],
+    "snake_ids": [
+      3317,
+      7869
+    ]
+  },
+  {
+    "camel": "fetchOrderItem",
+    "snake": "fetch_order_item",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      4431,
+      1234
+    ],
+    "snake_ids": [
+      7869,
+      5634
+    ]
+  },
+  {
+    "camel": "fetchPaymentMethod",
+    "snake": "fetch_payment_method",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      20188,
+      3523
+    ],
+    "snake_ids": [
+      26696,
+      9032
+    ]
+  },
+  {
+    "camel": "fetchSessionToken",
+    "snake": "fetch_session_token",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      5283,
+      3323
+    ],
+    "snake_ids": [
+      12316,
+      6458
+    ]
+  },
+  {
+    "camel": "fetchCacheEntry",
+    "snake": "fetch_cache_entry",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      8233,
+      5874
+    ],
+    "snake_ids": [
+      11529,
+      9078
+    ]
+  },
+  {
+    "camel": "fetchShippingAddress",
+    "snake": "fetch_shipping_address",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      43356,
+      4286
+    ],
+    "snake_ids": [
+      53553,
+      6744
+    ]
+  },
+  {
+    "camel": "fetchOrderHistory",
+    "snake": "fetch_order_history",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      4431,
+      13424
+    ],
+    "snake_ids": [
+      7869,
+      19802
+    ]
+  },
+  {
+    "camel": "fetchBillingRecord",
+    "snake": "fetch_billing_record",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      82007,
+      6471
+    ],
+    "snake_ids": [
+      87807,
+      14192
+    ]
+  },
+  {
+    "camel": "fetchAuthHeader",
+    "snake": "fetch_auth_header",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      5087,
+      4047
+    ],
+    "snake_ids": [
+      14014,
+      8757
+    ]
+  },
+  {
+    "camel": "createOrder",
+    "snake": "create_order",
+    "total_tokens": 4,
+    "decision_index": 3,
+    "name_span": 1,
+    "single_token_divergence": true,
+    "camel_ids": [
+      4431
+    ],
+    "snake_ids": [
+      7869
+    ]
+  },
+  {
+    "camel": "createSession",
+    "snake": "create_session",
+    "total_tokens": 4,
+    "decision_index": 3,
+    "name_span": 1,
+    "single_token_divergence": true,
+    "camel_ids": [
+      5283
+    ],
+    "snake_ids": [
+      12316
+    ]
+  },
+  {
+    "camel": "createToken",
+    "snake": "create_token",
+    "total_tokens": 4,
+    "decision_index": 3,
+    "name_span": 1,
+    "single_token_divergence": true,
+    "camel_ids": [
+      3323
+    ],
+    "snake_ids": [
+      6458
+    ]
+  },
+  {
+    "camel": "createPayment",
+    "snake": "create_payment",
+    "total_tokens": 4,
+    "decision_index": 3,
+    "name_span": 1,
+    "single_token_divergence": true,
+    "camel_ids": [
+      20188
+    ],
+    "snake_ids": [
+      26696
+    ]
+  },
+  {
+    "camel": "createInvoice",
+    "snake": "create_invoice",
+    "total_tokens": 4,
+    "decision_index": 3,
+    "name_span": 1,
+    "single_token_divergence": true,
+    "camel_ids": [
+      34674
+    ],
+    "snake_ids": [
+      39225
+    ]
+  },
+  {
+    "camel": "createOrderItem",
+    "snake": "create_order_item",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      4431,
+      1234
+    ],
+    "snake_ids": [
+      7869,
+      5634
+    ]
+  },
+  {
+    "camel": "createPaymentMethod",
+    "snake": "create_payment_method",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      20188,
+      3523
+    ],
+    "snake_ids": [
+      26696,
+      9032
+    ]
+  },
+  {
+    "camel": "createSessionToken",
+    "snake": "create_session_token",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      5283,
+      3323
+    ],
+    "snake_ids": [
+      12316,
+      6458
+    ]
+  },
+  {
+    "camel": "createCacheEntry",
+    "snake": "create_cache_entry",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      8233,
+      5874
+    ],
+    "snake_ids": [
+      11529,
+      9078
+    ]
+  },
+  {
+    "camel": "createShippingAddress",
+    "snake": "create_shipping_address",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      43356,
+      4286
+    ],
+    "snake_ids": [
+      53553,
+      6744
+    ]
+  },
+  {
+    "camel": "createOrderHistory",
+    "snake": "create_order_history",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      4431,
+      13424
+    ],
+    "snake_ids": [
+      7869,
+      19802
+    ]
+  },
+  {
+    "camel": "createBillingRecord",
+    "snake": "create_billing_record",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      82007,
+      6471
+    ],
+    "snake_ids": [
+      87807,
+      14192
+    ]
+  },
+  {
+    "camel": "createAuthHeader",
+    "snake": "create_auth_header",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      5087,
+      4047
+    ],
+    "snake_ids": [
+      14014,
+      8757
+    ]
+  },
+  {
+    "camel": "updateOrder",
+    "snake": "update_order",
+    "total_tokens": 4,
+    "decision_index": 3,
+    "name_span": 1,
+    "single_token_divergence": true,
+    "camel_ids": [
+      4431
+    ],
+    "snake_ids": [
+      7869
+    ]
+  },
+  {
+    "camel": "updateSession",
+    "snake": "update_session",
+    "total_tokens": 4,
+    "decision_index": 3,
+    "name_span": 1,
+    "single_token_divergence": true,
+    "camel_ids": [
+      5283
+    ],
+    "snake_ids": [
+      12316
+    ]
+  },
+  {
+    "camel": "updateToken",
+    "snake": "update_token",
+    "total_tokens": 4,
+    "decision_index": 3,
+    "name_span": 1,
+    "single_token_divergence": true,
+    "camel_ids": [
+      3323
+    ],
+    "snake_ids": [
+      6458
+    ]
+  },
+  {
+    "camel": "updatePayment",
+    "snake": "update_payment",
+    "total_tokens": 4,
+    "decision_index": 3,
+    "name_span": 1,
+    "single_token_divergence": true,
+    "camel_ids": [
+      20188
+    ],
+    "snake_ids": [
+      26696
+    ]
+  },
+  {
+    "camel": "updateInvoice",
+    "snake": "update_invoice",
+    "total_tokens": 4,
+    "decision_index": 3,
+    "name_span": 1,
+    "single_token_divergence": true,
+    "camel_ids": [
+      34674
+    ],
+    "snake_ids": [
+      39225
+    ]
+  },
+  {
+    "camel": "updateOrderItem",
+    "snake": "update_order_item",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      4431,
+      1234
+    ],
+    "snake_ids": [
+      7869,
+      5634
+    ]
+  },
+  {
+    "camel": "updatePaymentMethod",
+    "snake": "update_payment_method",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      20188,
+      3523
+    ],
+    "snake_ids": [
+      26696,
+      9032
+    ]
+  },
+  {
+    "camel": "updateSessionToken",
+    "snake": "update_session_token",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      5283,
+      3323
+    ],
+    "snake_ids": [
+      12316,
+      6458
+    ]
+  },
+  {
+    "camel": "updateCacheEntry",
+    "snake": "update_cache_entry",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      8233,
+      5874
+    ],
+    "snake_ids": [
+      11529,
+      9078
+    ]
+  },
+  {
+    "camel": "updateShippingAddress",
+    "snake": "update_shipping_address",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      43356,
+      4286
+    ],
+    "snake_ids": [
+      53553,
+      6744
+    ]
+  },
+  {
+    "camel": "updateOrderHistory",
+    "snake": "update_order_history",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      4431,
+      13424
+    ],
+    "snake_ids": [
+      7869,
+      19802
+    ]
+  },
+  {
+    "camel": "updateBillingRecord",
+    "snake": "update_billing_record",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      82007,
+      6471
+    ],
+    "snake_ids": [
+      87807,
+      14192
+    ]
+  },
+  {
+    "camel": "updateAuthHeader",
+    "snake": "update_auth_header",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      5087,
+      4047
+    ],
+    "snake_ids": [
+      14014,
+      8757
+    ]
+  },
+  {
+    "camel": "deleteOrder",
+    "snake": "delete_order",
+    "total_tokens": 4,
+    "decision_index": 3,
+    "name_span": 1,
+    "single_token_divergence": true,
+    "camel_ids": [
+      4431
+    ],
+    "snake_ids": [
+      7869
+    ]
+  },
+  {
+    "camel": "deleteSession",
+    "snake": "delete_session",
+    "total_tokens": 4,
+    "decision_index": 3,
+    "name_span": 1,
+    "single_token_divergence": true,
+    "camel_ids": [
+      5283
+    ],
+    "snake_ids": [
+      12316
+    ]
+  },
+  {
+    "camel": "deleteToken",
+    "snake": "delete_token",
+    "total_tokens": 4,
+    "decision_index": 3,
+    "name_span": 1,
+    "single_token_divergence": true,
+    "camel_ids": [
+      3323
+    ],
+    "snake_ids": [
+      6458
+    ]
+  },
+  {
+    "camel": "deletePayment",
+    "snake": "delete_payment",
+    "total_tokens": 4,
+    "decision_index": 3,
+    "name_span": 1,
+    "single_token_divergence": true,
+    "camel_ids": [
+      20188
+    ],
+    "snake_ids": [
+      26696
+    ]
+  },
+  {
+    "camel": "deleteInvoice",
+    "snake": "delete_invoice",
+    "total_tokens": 4,
+    "decision_index": 3,
+    "name_span": 1,
+    "single_token_divergence": true,
+    "camel_ids": [
+      34674
+    ],
+    "snake_ids": [
+      39225
+    ]
+  },
+  {
+    "camel": "deleteOrderItem",
+    "snake": "delete_order_item",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      4431,
+      1234
+    ],
+    "snake_ids": [
+      7869,
+      5634
+    ]
+  },
+  {
+    "camel": "deletePaymentMethod",
+    "snake": "delete_payment_method",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      20188,
+      3523
+    ],
+    "snake_ids": [
+      26696,
+      9032
+    ]
+  },
+  {
+    "camel": "deleteSessionToken",
+    "snake": "delete_session_token",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      5283,
+      3323
+    ],
+    "snake_ids": [
+      12316,
+      6458
+    ]
+  },
+  {
+    "camel": "deleteCacheEntry",
+    "snake": "delete_cache_entry",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      8233,
+      5874
+    ],
+    "snake_ids": [
+      11529,
+      9078
+    ]
+  },
+  {
+    "camel": "deleteShippingAddress",
+    "snake": "delete_shipping_address",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      43356,
+      4286
+    ],
+    "snake_ids": [
+      53553,
+      6744
+    ]
+  },
+  {
+    "camel": "deleteOrderHistory",
+    "snake": "delete_order_history",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      4431,
+      13424
+    ],
+    "snake_ids": [
+      7869,
+      19802
+    ]
+  },
+  {
+    "camel": "deleteBillingRecord",
+    "snake": "delete_billing_record",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      82007,
+      6471
+    ],
+    "snake_ids": [
+      87807,
+      14192
+    ]
+  },
+  {
+    "camel": "deleteAuthHeader",
+    "snake": "delete_auth_header",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      5087,
+      4047
+    ],
+    "snake_ids": [
+      14014,
+      8757
+    ]
+  },
+  {
+    "camel": "listUser",
+    "snake": "list_user",
+    "total_tokens": 4,
+    "decision_index": 3,
+    "name_span": 1,
+    "single_token_divergence": true,
+    "camel_ids": [
+      1474
+    ],
+    "snake_ids": [
+      3317
+    ]
+  },
+  {
+    "camel": "listOrder",
+    "snake": "list_order",
+    "total_tokens": 4,
+    "decision_index": 3,
+    "name_span": 1,
+    "single_token_divergence": true,
+    "camel_ids": [
+      4431
+    ],
+    "snake_ids": [
+      7869
+    ]
+  },
+  {
+    "camel": "listSession",
+    "snake": "list_session",
+    "total_tokens": 4,
+    "decision_index": 3,
+    "name_span": 1,
+    "single_token_divergence": true,
+    "camel_ids": [
+      5283
+    ],
+    "snake_ids": [
+      12316
+    ]
+  },
+  {
+    "camel": "listToken",
+    "snake": "list_token",
+    "total_tokens": 4,
+    "decision_index": 3,
+    "name_span": 1,
+    "single_token_divergence": true,
+    "camel_ids": [
+      3323
+    ],
+    "snake_ids": [
+      6458
+    ]
+  },
+  {
+    "camel": "listPayment",
+    "snake": "list_payment",
+    "total_tokens": 4,
+    "decision_index": 3,
+    "name_span": 1,
+    "single_token_divergence": true,
+    "camel_ids": [
+      20188
+    ],
+    "snake_ids": [
+      26696
+    ]
+  },
+  {
+    "camel": "listInvoice",
+    "snake": "list_invoice",
+    "total_tokens": 4,
+    "decision_index": 3,
+    "name_span": 1,
+    "single_token_divergence": true,
+    "camel_ids": [
+      34674
+    ],
+    "snake_ids": [
+      39225
+    ]
+  },
+  {
+    "camel": "listUserOrder",
+    "snake": "list_user_order",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      1474,
+      4431
+    ],
+    "snake_ids": [
+      3317,
+      7869
+    ]
+  },
+  {
+    "camel": "listOrderItem",
+    "snake": "list_order_item",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      4431,
+      1234
+    ],
+    "snake_ids": [
+      7869,
+      5634
+    ]
+  },
+  {
+    "camel": "listPaymentMethod",
+    "snake": "list_payment_method",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      20188,
+      3523
+    ],
+    "snake_ids": [
+      26696,
+      9032
+    ]
+  },
+  {
+    "camel": "listSessionToken",
+    "snake": "list_session_token",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      5283,
+      3323
+    ],
+    "snake_ids": [
+      12316,
+      6458
+    ]
+  },
+  {
+    "camel": "listCacheEntry",
+    "snake": "list_cache_entry",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      8233,
+      5874
+    ],
+    "snake_ids": [
+      11529,
+      9078
+    ]
+  },
+  {
+    "camel": "listShippingAddress",
+    "snake": "list_shipping_address",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      43356,
+      4286
+    ],
+    "snake_ids": [
+      53553,
+      6744
+    ]
+  },
+  {
+    "camel": "listOrderHistory",
+    "snake": "list_order_history",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      4431,
+      13424
+    ],
+    "snake_ids": [
+      7869,
+      19802
+    ]
+  },
+  {
+    "camel": "listBillingRecord",
+    "snake": "list_billing_record",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      82007,
+      6471
+    ],
+    "snake_ids": [
+      87807,
+      14192
+    ]
+  },
+  {
+    "camel": "listAuthHeader",
+    "snake": "list_auth_header",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      5087,
+      4047
+    ],
+    "snake_ids": [
+      14014,
+      8757
+    ]
+  },
+  {
+    "camel": "validateUser",
+    "snake": "validate_user",
+    "total_tokens": 4,
+    "decision_index": 3,
+    "name_span": 1,
+    "single_token_divergence": true,
+    "camel_ids": [
+      1474
+    ],
+    "snake_ids": [
+      3317
+    ]
+  },
+  {
+    "camel": "validateOrder",
+    "snake": "validate_order",
+    "total_tokens": 4,
+    "decision_index": 3,
+    "name_span": 1,
+    "single_token_divergence": true,
+    "camel_ids": [
+      4431
+    ],
+    "snake_ids": [
+      7869
+    ]
+  },
+  {
+    "camel": "validateSession",
+    "snake": "validate_session",
+    "total_tokens": 4,
+    "decision_index": 3,
+    "name_span": 1,
+    "single_token_divergence": true,
+    "camel_ids": [
+      5283
+    ],
+    "snake_ids": [
+      12316
+    ]
+  },
+  {
+    "camel": "validateToken",
+    "snake": "validate_token",
+    "total_tokens": 4,
+    "decision_index": 3,
+    "name_span": 1,
+    "single_token_divergence": true,
+    "camel_ids": [
+      3323
+    ],
+    "snake_ids": [
+      6458
+    ]
+  },
+  {
+    "camel": "validatePayment",
+    "snake": "validate_payment",
+    "total_tokens": 4,
+    "decision_index": 3,
+    "name_span": 1,
+    "single_token_divergence": true,
+    "camel_ids": [
+      20188
+    ],
+    "snake_ids": [
+      26696
+    ]
+  },
+  {
+    "camel": "validateInvoice",
+    "snake": "validate_invoice",
+    "total_tokens": 4,
+    "decision_index": 3,
+    "name_span": 1,
+    "single_token_divergence": true,
+    "camel_ids": [
+      34674
+    ],
+    "snake_ids": [
+      39225
+    ]
+  },
+  {
+    "camel": "validateUserOrder",
+    "snake": "validate_user_order",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      1474,
+      4431
+    ],
+    "snake_ids": [
+      3317,
+      7869
+    ]
+  },
+  {
+    "camel": "validateOrderItem",
+    "snake": "validate_order_item",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      4431,
+      1234
+    ],
+    "snake_ids": [
+      7869,
+      5634
+    ]
+  },
+  {
+    "camel": "validatePaymentMethod",
+    "snake": "validate_payment_method",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      20188,
+      3523
+    ],
+    "snake_ids": [
+      26696,
+      9032
+    ]
+  },
+  {
+    "camel": "validateSessionToken",
+    "snake": "validate_session_token",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      5283,
+      3323
+    ],
+    "snake_ids": [
+      12316,
+      6458
+    ]
+  },
+  {
+    "camel": "validateCacheEntry",
+    "snake": "validate_cache_entry",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      8233,
+      5874
+    ],
+    "snake_ids": [
+      11529,
+      9078
+    ]
+  },
+  {
+    "camel": "validateShippingAddress",
+    "snake": "validate_shipping_address",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      43356,
+      4286
+    ],
+    "snake_ids": [
+      53553,
+      6744
+    ]
+  },
+  {
+    "camel": "validateOrderHistory",
+    "snake": "validate_order_history",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      4431,
+      13424
+    ],
+    "snake_ids": [
+      7869,
+      19802
+    ]
+  },
+  {
+    "camel": "validateBillingRecord",
+    "snake": "validate_billing_record",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      82007,
+      6471
+    ],
+    "snake_ids": [
+      87807,
+      14192
+    ]
+  },
+  {
+    "camel": "validateAuthHeader",
+    "snake": "validate_auth_header",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      5087,
+      4047
+    ],
+    "snake_ids": [
+      14014,
+      8757
+    ]
+  },
+  {
+    "camel": "parseUser",
+    "snake": "parse_user",
+    "total_tokens": 4,
+    "decision_index": 3,
+    "name_span": 1,
+    "single_token_divergence": true,
+    "camel_ids": [
+      1474
+    ],
+    "snake_ids": [
+      3317
+    ]
+  },
+  {
+    "camel": "parseOrder",
+    "snake": "parse_order",
+    "total_tokens": 4,
+    "decision_index": 3,
+    "name_span": 1,
+    "single_token_divergence": true,
+    "camel_ids": [
+      4431
+    ],
+    "snake_ids": [
+      7869
+    ]
+  },
+  {
+    "camel": "parseSession",
+    "snake": "parse_session",
+    "total_tokens": 4,
+    "decision_index": 3,
+    "name_span": 1,
+    "single_token_divergence": true,
+    "camel_ids": [
+      5283
+    ],
+    "snake_ids": [
+      12316
+    ]
+  },
+  {
+    "camel": "parseToken",
+    "snake": "parse_token",
+    "total_tokens": 4,
+    "decision_index": 3,
+    "name_span": 1,
+    "single_token_divergence": true,
+    "camel_ids": [
+      3323
+    ],
+    "snake_ids": [
+      6458
+    ]
+  },
+  {
+    "camel": "parsePayment",
+    "snake": "parse_payment",
+    "total_tokens": 4,
+    "decision_index": 3,
+    "name_span": 1,
+    "single_token_divergence": true,
+    "camel_ids": [
+      20188
+    ],
+    "snake_ids": [
+      26696
+    ]
+  },
+  {
+    "camel": "parseInvoice",
+    "snake": "parse_invoice",
+    "total_tokens": 4,
+    "decision_index": 3,
+    "name_span": 1,
+    "single_token_divergence": true,
+    "camel_ids": [
+      34674
+    ],
+    "snake_ids": [
+      39225
+    ]
+  },
+  {
+    "camel": "parseUserOrder",
+    "snake": "parse_user_order",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      1474,
+      4431
+    ],
+    "snake_ids": [
+      3317,
+      7869
+    ]
+  },
+  {
+    "camel": "parseOrderItem",
+    "snake": "parse_order_item",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      4431,
+      1234
+    ],
+    "snake_ids": [
+      7869,
+      5634
+    ]
+  },
+  {
+    "camel": "parsePaymentMethod",
+    "snake": "parse_payment_method",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      20188,
+      3523
+    ],
+    "snake_ids": [
+      26696,
+      9032
+    ]
+  },
+  {
+    "camel": "parseSessionToken",
+    "snake": "parse_session_token",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      5283,
+      3323
+    ],
+    "snake_ids": [
+      12316,
+      6458
+    ]
+  },
+  {
+    "camel": "parseCacheEntry",
+    "snake": "parse_cache_entry",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      8233,
+      5874
+    ],
+    "snake_ids": [
+      11529,
+      9078
+    ]
+  },
+  {
+    "camel": "parseShippingAddress",
+    "snake": "parse_shipping_address",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      43356,
+      4286
+    ],
+    "snake_ids": [
+      53553,
+      6744
+    ]
+  },
+  {
+    "camel": "parseOrderHistory",
+    "snake": "parse_order_history",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      4431,
+      13424
+    ],
+    "snake_ids": [
+      7869,
+      19802
+    ]
+  },
+  {
+    "camel": "parseBillingRecord",
+    "snake": "parse_billing_record",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      82007,
+      6471
+    ],
+    "snake_ids": [
+      87807,
+      14192
+    ]
+  },
+  {
+    "camel": "parseAuthHeader",
+    "snake": "parse_auth_header",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      5087,
+      4047
+    ],
+    "snake_ids": [
+      14014,
+      8757
+    ]
+  },
+  {
+    "camel": "buildUser",
+    "snake": "build_user",
+    "total_tokens": 4,
+    "decision_index": 3,
+    "name_span": 1,
+    "single_token_divergence": true,
+    "camel_ids": [
+      1474
+    ],
+    "snake_ids": [
+      3317
+    ]
+  },
+  {
+    "camel": "buildOrder",
+    "snake": "build_order",
+    "total_tokens": 4,
+    "decision_index": 3,
+    "name_span": 1,
+    "single_token_divergence": true,
+    "camel_ids": [
+      4431
+    ],
+    "snake_ids": [
+      7869
+    ]
+  },
+  {
+    "camel": "buildSession",
+    "snake": "build_session",
+    "total_tokens": 4,
+    "decision_index": 3,
+    "name_span": 1,
+    "single_token_divergence": true,
+    "camel_ids": [
+      5283
+    ],
+    "snake_ids": [
+      12316
+    ]
+  },
+  {
+    "camel": "buildToken",
+    "snake": "build_token",
+    "total_tokens": 4,
+    "decision_index": 3,
+    "name_span": 1,
+    "single_token_divergence": true,
+    "camel_ids": [
+      3323
+    ],
+    "snake_ids": [
+      6458
+    ]
+  },
+  {
+    "camel": "buildPayment",
+    "snake": "build_payment",
+    "total_tokens": 4,
+    "decision_index": 3,
+    "name_span": 1,
+    "single_token_divergence": true,
+    "camel_ids": [
+      20188
+    ],
+    "snake_ids": [
+      26696
+    ]
+  },
+  {
+    "camel": "buildInvoice",
+    "snake": "build_invoice",
+    "total_tokens": 4,
+    "decision_index": 3,
+    "name_span": 1,
+    "single_token_divergence": true,
+    "camel_ids": [
+      34674
+    ],
+    "snake_ids": [
+      39225
+    ]
+  },
+  {
+    "camel": "buildUserOrder",
+    "snake": "build_user_order",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      1474,
+      4431
+    ],
+    "snake_ids": [
+      3317,
+      7869
+    ]
+  },
+  {
+    "camel": "buildOrderItem",
+    "snake": "build_order_item",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      4431,
+      1234
+    ],
+    "snake_ids": [
+      7869,
+      5634
+    ]
+  },
+  {
+    "camel": "buildPaymentMethod",
+    "snake": "build_payment_method",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      20188,
+      3523
+    ],
+    "snake_ids": [
+      26696,
+      9032
+    ]
+  },
+  {
+    "camel": "buildSessionToken",
+    "snake": "build_session_token",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      5283,
+      3323
+    ],
+    "snake_ids": [
+      12316,
+      6458
+    ]
+  },
+  {
+    "camel": "buildCacheEntry",
+    "snake": "build_cache_entry",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      8233,
+      5874
+    ],
+    "snake_ids": [
+      11529,
+      9078
+    ]
+  },
+  {
+    "camel": "buildShippingAddress",
+    "snake": "build_shipping_address",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      43356,
+      4286
+    ],
+    "snake_ids": [
+      53553,
+      6744
+    ]
+  },
+  {
+    "camel": "buildOrderHistory",
+    "snake": "build_order_history",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      4431,
+      13424
+    ],
+    "snake_ids": [
+      7869,
+      19802
+    ]
+  },
+  {
+    "camel": "buildBillingRecord",
+    "snake": "build_billing_record",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      82007,
+      6471
+    ],
+    "snake_ids": [
+      87807,
+      14192
+    ]
+  },
+  {
+    "camel": "buildAuthHeader",
+    "snake": "build_auth_header",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      5087,
+      4047
+    ],
+    "snake_ids": [
+      14014,
+      8757
+    ]
+  },
+  {
+    "camel": "sendUser",
+    "snake": "send_user",
+    "total_tokens": 4,
+    "decision_index": 3,
+    "name_span": 1,
+    "single_token_divergence": true,
+    "camel_ids": [
+      1474
+    ],
+    "snake_ids": [
+      3317
+    ]
+  },
+  {
+    "camel": "sendOrder",
+    "snake": "send_order",
+    "total_tokens": 4,
+    "decision_index": 3,
+    "name_span": 1,
+    "single_token_divergence": true,
+    "camel_ids": [
+      4431
+    ],
+    "snake_ids": [
+      7869
+    ]
+  },
+  {
+    "camel": "sendSession",
+    "snake": "send_session",
+    "total_tokens": 4,
+    "decision_index": 3,
+    "name_span": 1,
+    "single_token_divergence": true,
+    "camel_ids": [
+      5283
+    ],
+    "snake_ids": [
+      12316
+    ]
+  },
+  {
+    "camel": "sendToken",
+    "snake": "send_token",
+    "total_tokens": 4,
+    "decision_index": 3,
+    "name_span": 1,
+    "single_token_divergence": true,
+    "camel_ids": [
+      3323
+    ],
+    "snake_ids": [
+      6458
+    ]
+  },
+  {
+    "camel": "sendPayment",
+    "snake": "send_payment",
+    "total_tokens": 4,
+    "decision_index": 3,
+    "name_span": 1,
+    "single_token_divergence": true,
+    "camel_ids": [
+      20188
+    ],
+    "snake_ids": [
+      26696
+    ]
+  },
+  {
+    "camel": "sendInvoice",
+    "snake": "send_invoice",
+    "total_tokens": 4,
+    "decision_index": 3,
+    "name_span": 1,
+    "single_token_divergence": true,
+    "camel_ids": [
+      34674
+    ],
+    "snake_ids": [
+      39225
+    ]
+  },
+  {
+    "camel": "sendUserOrder",
+    "snake": "send_user_order",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      1474,
+      4431
+    ],
+    "snake_ids": [
+      3317,
+      7869
+    ]
+  },
+  {
+    "camel": "sendOrderItem",
+    "snake": "send_order_item",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      4431,
+      1234
+    ],
+    "snake_ids": [
+      7869,
+      5634
+    ]
+  },
+  {
+    "camel": "sendPaymentMethod",
+    "snake": "send_payment_method",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      20188,
+      3523
+    ],
+    "snake_ids": [
+      26696,
+      9032
+    ]
+  },
+  {
+    "camel": "sendSessionToken",
+    "snake": "send_session_token",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      5283,
+      3323
+    ],
+    "snake_ids": [
+      12316,
+      6458
+    ]
+  },
+  {
+    "camel": "sendCacheEntry",
+    "snake": "send_cache_entry",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      8233,
+      5874
+    ],
+    "snake_ids": [
+      11529,
+      9078
+    ]
+  },
+  {
+    "camel": "sendShippingAddress",
+    "snake": "send_shipping_address",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      43356,
+      4286
+    ],
+    "snake_ids": [
+      53553,
+      6744
+    ]
+  },
+  {
+    "camel": "sendOrderHistory",
+    "snake": "send_order_history",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      4431,
+      13424
+    ],
+    "snake_ids": [
+      7869,
+      19802
+    ]
+  },
+  {
+    "camel": "sendBillingRecord",
+    "snake": "send_billing_record",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      82007,
+      6471
+    ],
+    "snake_ids": [
+      87807,
+      14192
+    ]
+  },
+  {
+    "camel": "sendAuthHeader",
+    "snake": "send_auth_header",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      5087,
+      4047
+    ],
+    "snake_ids": [
+      14014,
+      8757
+    ]
+  },
+  {
+    "camel": "loadUser",
+    "snake": "load_user",
+    "total_tokens": 4,
+    "decision_index": 3,
+    "name_span": 1,
+    "single_token_divergence": true,
+    "camel_ids": [
+      1474
+    ],
+    "snake_ids": [
+      3317
+    ]
+  },
+  {
+    "camel": "loadOrder",
+    "snake": "load_order",
+    "total_tokens": 4,
+    "decision_index": 3,
+    "name_span": 1,
+    "single_token_divergence": true,
+    "camel_ids": [
+      4431
+    ],
+    "snake_ids": [
+      7869
+    ]
+  },
+  {
+    "camel": "loadSession",
+    "snake": "load_session",
+    "total_tokens": 4,
+    "decision_index": 3,
+    "name_span": 1,
+    "single_token_divergence": true,
+    "camel_ids": [
+      5283
+    ],
+    "snake_ids": [
+      12316
+    ]
+  },
+  {
+    "camel": "loadToken",
+    "snake": "load_token",
+    "total_tokens": 4,
+    "decision_index": 3,
+    "name_span": 1,
+    "single_token_divergence": true,
+    "camel_ids": [
+      3323
+    ],
+    "snake_ids": [
+      6458
+    ]
+  },
+  {
+    "camel": "loadPayment",
+    "snake": "load_payment",
+    "total_tokens": 4,
+    "decision_index": 3,
+    "name_span": 1,
+    "single_token_divergence": true,
+    "camel_ids": [
+      20188
+    ],
+    "snake_ids": [
+      26696
+    ]
+  },
+  {
+    "camel": "loadInvoice",
+    "snake": "load_invoice",
+    "total_tokens": 4,
+    "decision_index": 3,
+    "name_span": 1,
+    "single_token_divergence": true,
+    "camel_ids": [
+      34674
+    ],
+    "snake_ids": [
+      39225
+    ]
+  },
+  {
+    "camel": "loadUserOrder",
+    "snake": "load_user_order",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      1474,
+      4431
+    ],
+    "snake_ids": [
+      3317,
+      7869
+    ]
+  },
+  {
+    "camel": "loadOrderItem",
+    "snake": "load_order_item",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      4431,
+      1234
+    ],
+    "snake_ids": [
+      7869,
+      5634
+    ]
+  },
+  {
+    "camel": "loadPaymentMethod",
+    "snake": "load_payment_method",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      20188,
+      3523
+    ],
+    "snake_ids": [
+      26696,
+      9032
+    ]
+  },
+  {
+    "camel": "loadSessionToken",
+    "snake": "load_session_token",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      5283,
+      3323
+    ],
+    "snake_ids": [
+      12316,
+      6458
+    ]
+  },
+  {
+    "camel": "loadCacheEntry",
+    "snake": "load_cache_entry",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      8233,
+      5874
+    ],
+    "snake_ids": [
+      11529,
+      9078
+    ]
+  },
+  {
+    "camel": "loadShippingAddress",
+    "snake": "load_shipping_address",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      43356,
+      4286
+    ],
+    "snake_ids": [
+      53553,
+      6744
+    ]
+  },
+  {
+    "camel": "loadOrderHistory",
+    "snake": "load_order_history",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      4431,
+      13424
+    ],
+    "snake_ids": [
+      7869,
+      19802
+    ]
+  },
+  {
+    "camel": "loadBillingRecord",
+    "snake": "load_billing_record",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      82007,
+      6471
+    ],
+    "snake_ids": [
+      87807,
+      14192
+    ]
+  },
+  {
+    "camel": "loadAuthHeader",
+    "snake": "load_auth_header",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      5087,
+      4047
+    ],
+    "snake_ids": [
+      14014,
+      8757
+    ]
+  },
+  {
+    "camel": "saveUser",
+    "snake": "save_user",
+    "total_tokens": 4,
+    "decision_index": 3,
+    "name_span": 1,
+    "single_token_divergence": true,
+    "camel_ids": [
+      1474
+    ],
+    "snake_ids": [
+      3317
+    ]
+  },
+  {
+    "camel": "saveOrder",
+    "snake": "save_order",
+    "total_tokens": 4,
+    "decision_index": 3,
+    "name_span": 1,
+    "single_token_divergence": true,
+    "camel_ids": [
+      4431
+    ],
+    "snake_ids": [
+      7869
+    ]
+  },
+  {
+    "camel": "saveSession",
+    "snake": "save_session",
+    "total_tokens": 4,
+    "decision_index": 3,
+    "name_span": 1,
+    "single_token_divergence": true,
+    "camel_ids": [
+      5283
+    ],
+    "snake_ids": [
+      12316
+    ]
+  },
+  {
+    "camel": "saveToken",
+    "snake": "save_token",
+    "total_tokens": 4,
+    "decision_index": 3,
+    "name_span": 1,
+    "single_token_divergence": true,
+    "camel_ids": [
+      3323
+    ],
+    "snake_ids": [
+      6458
+    ]
+  },
+  {
+    "camel": "savePayment",
+    "snake": "save_payment",
+    "total_tokens": 4,
+    "decision_index": 3,
+    "name_span": 1,
+    "single_token_divergence": true,
+    "camel_ids": [
+      20188
+    ],
+    "snake_ids": [
+      26696
+    ]
+  },
+  {
+    "camel": "saveInvoice",
+    "snake": "save_invoice",
+    "total_tokens": 4,
+    "decision_index": 3,
+    "name_span": 1,
+    "single_token_divergence": true,
+    "camel_ids": [
+      34674
+    ],
+    "snake_ids": [
+      39225
+    ]
+  },
+  {
+    "camel": "saveUserOrder",
+    "snake": "save_user_order",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      1474,
+      4431
+    ],
+    "snake_ids": [
+      3317,
+      7869
+    ]
+  },
+  {
+    "camel": "saveOrderItem",
+    "snake": "save_order_item",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      4431,
+      1234
+    ],
+    "snake_ids": [
+      7869,
+      5634
+    ]
+  },
+  {
+    "camel": "savePaymentMethod",
+    "snake": "save_payment_method",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      20188,
+      3523
+    ],
+    "snake_ids": [
+      26696,
+      9032
+    ]
+  },
+  {
+    "camel": "saveSessionToken",
+    "snake": "save_session_token",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      5283,
+      3323
+    ],
+    "snake_ids": [
+      12316,
+      6458
+    ]
+  },
+  {
+    "camel": "saveCacheEntry",
+    "snake": "save_cache_entry",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      8233,
+      5874
+    ],
+    "snake_ids": [
+      11529,
+      9078
+    ]
+  },
+  {
+    "camel": "saveShippingAddress",
+    "snake": "save_shipping_address",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      43356,
+      4286
+    ],
+    "snake_ids": [
+      53553,
+      6744
+    ]
+  },
+  {
+    "camel": "saveOrderHistory",
+    "snake": "save_order_history",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      4431,
+      13424
+    ],
+    "snake_ids": [
+      7869,
+      19802
+    ]
+  },
+  {
+    "camel": "saveBillingRecord",
+    "snake": "save_billing_record",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      82007,
+      6471
+    ],
+    "snake_ids": [
+      87807,
+      14192
+    ]
+  },
+  {
+    "camel": "saveAuthHeader",
+    "snake": "save_auth_header",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      5087,
+      4047
+    ],
+    "snake_ids": [
+      14014,
+      8757
+    ]
+  },
+  {
+    "camel": "findUser",
+    "snake": "find_user",
+    "total_tokens": 4,
+    "decision_index": 3,
+    "name_span": 1,
+    "single_token_divergence": true,
+    "camel_ids": [
+      1474
+    ],
+    "snake_ids": [
+      3317
+    ]
+  },
+  {
+    "camel": "findOrder",
+    "snake": "find_order",
+    "total_tokens": 4,
+    "decision_index": 3,
+    "name_span": 1,
+    "single_token_divergence": true,
+    "camel_ids": [
+      4431
+    ],
+    "snake_ids": [
+      7869
+    ]
+  },
+  {
+    "camel": "findSession",
+    "snake": "find_session",
+    "total_tokens": 4,
+    "decision_index": 3,
+    "name_span": 1,
+    "single_token_divergence": true,
+    "camel_ids": [
+      5283
+    ],
+    "snake_ids": [
+      12316
+    ]
+  },
+  {
+    "camel": "findToken",
+    "snake": "find_token",
+    "total_tokens": 4,
+    "decision_index": 3,
+    "name_span": 1,
+    "single_token_divergence": true,
+    "camel_ids": [
+      3323
+    ],
+    "snake_ids": [
+      6458
+    ]
+  },
+  {
+    "camel": "findPayment",
+    "snake": "find_payment",
+    "total_tokens": 4,
+    "decision_index": 3,
+    "name_span": 1,
+    "single_token_divergence": true,
+    "camel_ids": [
+      20188
+    ],
+    "snake_ids": [
+      26696
+    ]
+  },
+  {
+    "camel": "findInvoice",
+    "snake": "find_invoice",
+    "total_tokens": 4,
+    "decision_index": 3,
+    "name_span": 1,
+    "single_token_divergence": true,
+    "camel_ids": [
+      34674
+    ],
+    "snake_ids": [
+      39225
+    ]
+  },
+  {
+    "camel": "findUserOrder",
+    "snake": "find_user_order",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      1474,
+      4431
+    ],
+    "snake_ids": [
+      3317,
+      7869
+    ]
+  },
+  {
+    "camel": "findOrderItem",
+    "snake": "find_order_item",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      4431,
+      1234
+    ],
+    "snake_ids": [
+      7869,
+      5634
+    ]
+  },
+  {
+    "camel": "findPaymentMethod",
+    "snake": "find_payment_method",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      20188,
+      3523
+    ],
+    "snake_ids": [
+      26696,
+      9032
+    ]
+  },
+  {
+    "camel": "findSessionToken",
+    "snake": "find_session_token",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      5283,
+      3323
+    ],
+    "snake_ids": [
+      12316,
+      6458
+    ]
+  },
+  {
+    "camel": "findCacheEntry",
+    "snake": "find_cache_entry",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      8233,
+      5874
+    ],
+    "snake_ids": [
+      11529,
+      9078
+    ]
+  },
+  {
+    "camel": "findShippingAddress",
+    "snake": "find_shipping_address",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      43356,
+      4286
+    ],
+    "snake_ids": [
+      53553,
+      6744
+    ]
+  },
+  {
+    "camel": "findOrderHistory",
+    "snake": "find_order_history",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      4431,
+      13424
+    ],
+    "snake_ids": [
+      7869,
+      19802
+    ]
+  },
+  {
+    "camel": "findBillingRecord",
+    "snake": "find_billing_record",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      82007,
+      6471
+    ],
+    "snake_ids": [
+      87807,
+      14192
+    ]
+  },
+  {
+    "camel": "findAuthHeader",
+    "snake": "find_auth_header",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      5087,
+      4047
+    ],
+    "snake_ids": [
+      14014,
+      8757
+    ]
+  },
+  {
+    "camel": "checkUser",
+    "snake": "check_user",
+    "total_tokens": 4,
+    "decision_index": 3,
+    "name_span": 1,
+    "single_token_divergence": true,
+    "camel_ids": [
+      1474
+    ],
+    "snake_ids": [
+      3317
+    ]
+  },
+  {
+    "camel": "checkOrder",
+    "snake": "check_order",
+    "total_tokens": 4,
+    "decision_index": 3,
+    "name_span": 1,
+    "single_token_divergence": true,
+    "camel_ids": [
+      4431
+    ],
+    "snake_ids": [
+      7869
+    ]
+  },
+  {
+    "camel": "checkSession",
+    "snake": "check_session",
+    "total_tokens": 4,
+    "decision_index": 3,
+    "name_span": 1,
+    "single_token_divergence": true,
+    "camel_ids": [
+      5283
+    ],
+    "snake_ids": [
+      12316
+    ]
+  },
+  {
+    "camel": "checkToken",
+    "snake": "check_token",
+    "total_tokens": 4,
+    "decision_index": 3,
+    "name_span": 1,
+    "single_token_divergence": true,
+    "camel_ids": [
+      3323
+    ],
+    "snake_ids": [
+      6458
+    ]
+  },
+  {
+    "camel": "checkPayment",
+    "snake": "check_payment",
+    "total_tokens": 4,
+    "decision_index": 3,
+    "name_span": 1,
+    "single_token_divergence": true,
+    "camel_ids": [
+      20188
+    ],
+    "snake_ids": [
+      26696
+    ]
+  },
+  {
+    "camel": "checkInvoice",
+    "snake": "check_invoice",
+    "total_tokens": 4,
+    "decision_index": 3,
+    "name_span": 1,
+    "single_token_divergence": true,
+    "camel_ids": [
+      34674
+    ],
+    "snake_ids": [
+      39225
+    ]
+  },
+  {
+    "camel": "checkUserOrder",
+    "snake": "check_user_order",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      1474,
+      4431
+    ],
+    "snake_ids": [
+      3317,
+      7869
+    ]
+  },
+  {
+    "camel": "checkOrderItem",
+    "snake": "check_order_item",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      4431,
+      1234
+    ],
+    "snake_ids": [
+      7869,
+      5634
+    ]
+  },
+  {
+    "camel": "checkPaymentMethod",
+    "snake": "check_payment_method",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      20188,
+      3523
+    ],
+    "snake_ids": [
+      26696,
+      9032
+    ]
+  },
+  {
+    "camel": "checkSessionToken",
+    "snake": "check_session_token",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      5283,
+      3323
+    ],
+    "snake_ids": [
+      12316,
+      6458
+    ]
+  },
+  {
+    "camel": "checkCacheEntry",
+    "snake": "check_cache_entry",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      8233,
+      5874
+    ],
+    "snake_ids": [
+      11529,
+      9078
+    ]
+  },
+  {
+    "camel": "checkShippingAddress",
+    "snake": "check_shipping_address",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      43356,
+      4286
+    ],
+    "snake_ids": [
+      53553,
+      6744
+    ]
+  },
+  {
+    "camel": "checkOrderHistory",
+    "snake": "check_order_history",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      4431,
+      13424
+    ],
+    "snake_ids": [
+      7869,
+      19802
+    ]
+  },
+  {
+    "camel": "checkBillingRecord",
+    "snake": "check_billing_record",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      82007,
+      6471
+    ],
+    "snake_ids": [
+      87807,
+      14192
+    ]
+  },
+  {
+    "camel": "checkAuthHeader",
+    "snake": "check_auth_header",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      5087,
+      4047
+    ],
+    "snake_ids": [
+      14014,
+      8757
+    ]
+  },
+  {
+    "camel": "renderUser",
+    "snake": "render_user",
+    "total_tokens": 4,
+    "decision_index": 3,
+    "name_span": 1,
+    "single_token_divergence": true,
+    "camel_ids": [
+      1474
+    ],
+    "snake_ids": [
+      3317
+    ]
+  },
+  {
+    "camel": "renderOrder",
+    "snake": "render_order",
+    "total_tokens": 4,
+    "decision_index": 3,
+    "name_span": 1,
+    "single_token_divergence": true,
+    "camel_ids": [
+      4431
+    ],
+    "snake_ids": [
+      7869
+    ]
+  },
+  {
+    "camel": "renderSession",
+    "snake": "render_session",
+    "total_tokens": 4,
+    "decision_index": 3,
+    "name_span": 1,
+    "single_token_divergence": true,
+    "camel_ids": [
+      5283
+    ],
+    "snake_ids": [
+      12316
+    ]
+  },
+  {
+    "camel": "renderToken",
+    "snake": "render_token",
+    "total_tokens": 4,
+    "decision_index": 3,
+    "name_span": 1,
+    "single_token_divergence": true,
+    "camel_ids": [
+      3323
+    ],
+    "snake_ids": [
+      6458
+    ]
+  },
+  {
+    "camel": "renderPayment",
+    "snake": "render_payment",
+    "total_tokens": 4,
+    "decision_index": 3,
+    "name_span": 1,
+    "single_token_divergence": true,
+    "camel_ids": [
+      20188
+    ],
+    "snake_ids": [
+      26696
+    ]
+  },
+  {
+    "camel": "renderInvoice",
+    "snake": "render_invoice",
+    "total_tokens": 4,
+    "decision_index": 3,
+    "name_span": 1,
+    "single_token_divergence": true,
+    "camel_ids": [
+      34674
+    ],
+    "snake_ids": [
+      39225
+    ]
+  },
+  {
+    "camel": "renderUserOrder",
+    "snake": "render_user_order",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      1474,
+      4431
+    ],
+    "snake_ids": [
+      3317,
+      7869
+    ]
+  },
+  {
+    "camel": "renderOrderItem",
+    "snake": "render_order_item",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      4431,
+      1234
+    ],
+    "snake_ids": [
+      7869,
+      5634
+    ]
+  },
+  {
+    "camel": "renderPaymentMethod",
+    "snake": "render_payment_method",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      20188,
+      3523
+    ],
+    "snake_ids": [
+      26696,
+      9032
+    ]
+  },
+  {
+    "camel": "renderSessionToken",
+    "snake": "render_session_token",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      5283,
+      3323
+    ],
+    "snake_ids": [
+      12316,
+      6458
+    ]
+  },
+  {
+    "camel": "renderCacheEntry",
+    "snake": "render_cache_entry",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      8233,
+      5874
+    ],
+    "snake_ids": [
+      11529,
+      9078
+    ]
+  },
+  {
+    "camel": "renderShippingAddress",
+    "snake": "render_shipping_address",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      43356,
+      4286
+    ],
+    "snake_ids": [
+      53553,
+      6744
+    ]
+  },
+  {
+    "camel": "renderOrderHistory",
+    "snake": "render_order_history",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      4431,
+      13424
+    ],
+    "snake_ids": [
+      7869,
+      19802
+    ]
+  },
+  {
+    "camel": "renderBillingRecord",
+    "snake": "render_billing_record",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      82007,
+      6471
+    ],
+    "snake_ids": [
+      87807,
+      14192
+    ]
+  },
+  {
+    "camel": "renderAuthHeader",
+    "snake": "render_auth_header",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      5087,
+      4047
+    ],
+    "snake_ids": [
+      14014,
+      8757
+    ]
+  },
+  {
+    "camel": "resolveUser",
+    "snake": "resolve_user",
+    "total_tokens": 4,
+    "decision_index": 3,
+    "name_span": 1,
+    "single_token_divergence": true,
+    "camel_ids": [
+      1474
+    ],
+    "snake_ids": [
+      3317
+    ]
+  },
+  {
+    "camel": "resolveOrder",
+    "snake": "resolve_order",
+    "total_tokens": 4,
+    "decision_index": 3,
+    "name_span": 1,
+    "single_token_divergence": true,
+    "camel_ids": [
+      4431
+    ],
+    "snake_ids": [
+      7869
+    ]
+  },
+  {
+    "camel": "resolveSession",
+    "snake": "resolve_session",
+    "total_tokens": 4,
+    "decision_index": 3,
+    "name_span": 1,
+    "single_token_divergence": true,
+    "camel_ids": [
+      5283
+    ],
+    "snake_ids": [
+      12316
+    ]
+  },
+  {
+    "camel": "resolveToken",
+    "snake": "resolve_token",
+    "total_tokens": 4,
+    "decision_index": 3,
+    "name_span": 1,
+    "single_token_divergence": true,
+    "camel_ids": [
+      3323
+    ],
+    "snake_ids": [
+      6458
+    ]
+  },
+  {
+    "camel": "resolvePayment",
+    "snake": "resolve_payment",
+    "total_tokens": 4,
+    "decision_index": 3,
+    "name_span": 1,
+    "single_token_divergence": true,
+    "camel_ids": [
+      20188
+    ],
+    "snake_ids": [
+      26696
+    ]
+  },
+  {
+    "camel": "resolveInvoice",
+    "snake": "resolve_invoice",
+    "total_tokens": 4,
+    "decision_index": 3,
+    "name_span": 1,
+    "single_token_divergence": true,
+    "camel_ids": [
+      34674
+    ],
+    "snake_ids": [
+      39225
+    ]
+  },
+  {
+    "camel": "resolveUserOrder",
+    "snake": "resolve_user_order",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      1474,
+      4431
+    ],
+    "snake_ids": [
+      3317,
+      7869
+    ]
+  },
+  {
+    "camel": "resolveOrderItem",
+    "snake": "resolve_order_item",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      4431,
+      1234
+    ],
+    "snake_ids": [
+      7869,
+      5634
+    ]
+  },
+  {
+    "camel": "resolvePaymentMethod",
+    "snake": "resolve_payment_method",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      20188,
+      3523
+    ],
+    "snake_ids": [
+      26696,
+      9032
+    ]
+  },
+  {
+    "camel": "resolveSessionToken",
+    "snake": "resolve_session_token",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      5283,
+      3323
+    ],
+    "snake_ids": [
+      12316,
+      6458
+    ]
+  },
+  {
+    "camel": "resolveCacheEntry",
+    "snake": "resolve_cache_entry",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      8233,
+      5874
+    ],
+    "snake_ids": [
+      11529,
+      9078
+    ]
+  },
+  {
+    "camel": "resolveShippingAddress",
+    "snake": "resolve_shipping_address",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      43356,
+      4286
+    ],
+    "snake_ids": [
+      53553,
+      6744
+    ]
+  },
+  {
+    "camel": "resolveOrderHistory",
+    "snake": "resolve_order_history",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      4431,
+      13424
+    ],
+    "snake_ids": [
+      7869,
+      19802
+    ]
+  },
+  {
+    "camel": "resolveBillingRecord",
+    "snake": "resolve_billing_record",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      82007,
+      6471
+    ],
+    "snake_ids": [
+      87807,
+      14192
+    ]
+  },
+  {
+    "camel": "resolveAuthHeader",
+    "snake": "resolve_auth_header",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      5087,
+      4047
+    ],
+    "snake_ids": [
+      14014,
+      8757
+    ]
+  },
+  {
+    "camel": "applyUser",
+    "snake": "apply_user",
+    "total_tokens": 4,
+    "decision_index": 3,
+    "name_span": 1,
+    "single_token_divergence": true,
+    "camel_ids": [
+      1474
+    ],
+    "snake_ids": [
+      3317
+    ]
+  },
+  {
+    "camel": "applyOrder",
+    "snake": "apply_order",
+    "total_tokens": 4,
+    "decision_index": 3,
+    "name_span": 1,
+    "single_token_divergence": true,
+    "camel_ids": [
+      4431
+    ],
+    "snake_ids": [
+      7869
+    ]
+  },
+  {
+    "camel": "applySession",
+    "snake": "apply_session",
+    "total_tokens": 4,
+    "decision_index": 3,
+    "name_span": 1,
+    "single_token_divergence": true,
+    "camel_ids": [
+      5283
+    ],
+    "snake_ids": [
+      12316
+    ]
+  },
+  {
+    "camel": "applyToken",
+    "snake": "apply_token",
+    "total_tokens": 4,
+    "decision_index": 3,
+    "name_span": 1,
+    "single_token_divergence": true,
+    "camel_ids": [
+      3323
+    ],
+    "snake_ids": [
+      6458
+    ]
+  },
+  {
+    "camel": "applyPayment",
+    "snake": "apply_payment",
+    "total_tokens": 4,
+    "decision_index": 3,
+    "name_span": 1,
+    "single_token_divergence": true,
+    "camel_ids": [
+      20188
+    ],
+    "snake_ids": [
+      26696
+    ]
+  },
+  {
+    "camel": "applyInvoice",
+    "snake": "apply_invoice",
+    "total_tokens": 4,
+    "decision_index": 3,
+    "name_span": 1,
+    "single_token_divergence": true,
+    "camel_ids": [
+      34674
+    ],
+    "snake_ids": [
+      39225
+    ]
+  },
+  {
+    "camel": "applyUserOrder",
+    "snake": "apply_user_order",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      1474,
+      4431
+    ],
+    "snake_ids": [
+      3317,
+      7869
+    ]
+  },
+  {
+    "camel": "applyOrderItem",
+    "snake": "apply_order_item",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      4431,
+      1234
+    ],
+    "snake_ids": [
+      7869,
+      5634
+    ]
+  },
+  {
+    "camel": "applyPaymentMethod",
+    "snake": "apply_payment_method",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      20188,
+      3523
+    ],
+    "snake_ids": [
+      26696,
+      9032
+    ]
+  },
+  {
+    "camel": "applySessionToken",
+    "snake": "apply_session_token",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      5283,
+      3323
+    ],
+    "snake_ids": [
+      12316,
+      6458
+    ]
+  },
+  {
+    "camel": "applyCacheEntry",
+    "snake": "apply_cache_entry",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      8233,
+      5874
+    ],
+    "snake_ids": [
+      11529,
+      9078
+    ]
+  },
+  {
+    "camel": "applyShippingAddress",
+    "snake": "apply_shipping_address",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      43356,
+      4286
+    ],
+    "snake_ids": [
+      53553,
+      6744
+    ]
+  },
+  {
+    "camel": "applyOrderHistory",
+    "snake": "apply_order_history",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      4431,
+      13424
+    ],
+    "snake_ids": [
+      7869,
+      19802
+    ]
+  },
+  {
+    "camel": "applyBillingRecord",
+    "snake": "apply_billing_record",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      82007,
+      6471
+    ],
+    "snake_ids": [
+      87807,
+      14192
+    ]
+  },
+  {
+    "camel": "applyAuthHeader",
+    "snake": "apply_auth_header",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      5087,
+      4047
+    ],
+    "snake_ids": [
+      14014,
+      8757
+    ]
+  },
+  {
+    "camel": "mergeUser",
+    "snake": "merge_user",
+    "total_tokens": 4,
+    "decision_index": 3,
+    "name_span": 1,
+    "single_token_divergence": true,
+    "camel_ids": [
+      1474
+    ],
+    "snake_ids": [
+      3317
+    ]
+  },
+  {
+    "camel": "mergeOrder",
+    "snake": "merge_order",
+    "total_tokens": 4,
+    "decision_index": 3,
+    "name_span": 1,
+    "single_token_divergence": true,
+    "camel_ids": [
+      4431
+    ],
+    "snake_ids": [
+      7869
+    ]
+  },
+  {
+    "camel": "mergeSession",
+    "snake": "merge_session",
+    "total_tokens": 4,
+    "decision_index": 3,
+    "name_span": 1,
+    "single_token_divergence": true,
+    "camel_ids": [
+      5283
+    ],
+    "snake_ids": [
+      12316
+    ]
+  },
+  {
+    "camel": "mergeToken",
+    "snake": "merge_token",
+    "total_tokens": 4,
+    "decision_index": 3,
+    "name_span": 1,
+    "single_token_divergence": true,
+    "camel_ids": [
+      3323
+    ],
+    "snake_ids": [
+      6458
+    ]
+  },
+  {
+    "camel": "mergePayment",
+    "snake": "merge_payment",
+    "total_tokens": 4,
+    "decision_index": 3,
+    "name_span": 1,
+    "single_token_divergence": true,
+    "camel_ids": [
+      20188
+    ],
+    "snake_ids": [
+      26696
+    ]
+  },
+  {
+    "camel": "mergeInvoice",
+    "snake": "merge_invoice",
+    "total_tokens": 4,
+    "decision_index": 3,
+    "name_span": 1,
+    "single_token_divergence": true,
+    "camel_ids": [
+      34674
+    ],
+    "snake_ids": [
+      39225
+    ]
+  },
+  {
+    "camel": "mergeUserOrder",
+    "snake": "merge_user_order",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      1474,
+      4431
+    ],
+    "snake_ids": [
+      3317,
+      7869
+    ]
+  },
+  {
+    "camel": "mergeOrderItem",
+    "snake": "merge_order_item",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      4431,
+      1234
+    ],
+    "snake_ids": [
+      7869,
+      5634
+    ]
+  },
+  {
+    "camel": "mergePaymentMethod",
+    "snake": "merge_payment_method",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      20188,
+      3523
+    ],
+    "snake_ids": [
+      26696,
+      9032
+    ]
+  },
+  {
+    "camel": "mergeSessionToken",
+    "snake": "merge_session_token",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      5283,
+      3323
+    ],
+    "snake_ids": [
+      12316,
+      6458
+    ]
+  },
+  {
+    "camel": "mergeCacheEntry",
+    "snake": "merge_cache_entry",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      8233,
+      5874
+    ],
+    "snake_ids": [
+      11529,
+      9078
+    ]
+  },
+  {
+    "camel": "mergeShippingAddress",
+    "snake": "merge_shipping_address",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      43356,
+      4286
+    ],
+    "snake_ids": [
+      53553,
+      6744
+    ]
+  },
+  {
+    "camel": "mergeOrderHistory",
+    "snake": "merge_order_history",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      4431,
+      13424
+    ],
+    "snake_ids": [
+      7869,
+      19802
+    ]
+  },
+  {
+    "camel": "mergeBillingRecord",
+    "snake": "merge_billing_record",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      82007,
+      6471
+    ],
+    "snake_ids": [
+      87807,
+      14192
+    ]
+  },
+  {
+    "camel": "mergeAuthHeader",
+    "snake": "merge_auth_header",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      5087,
+      4047
+    ],
+    "snake_ids": [
+      14014,
+      8757
+    ]
+  },
+  {
+    "camel": "filterUser",
+    "snake": "filter_user",
+    "total_tokens": 4,
+    "decision_index": 3,
+    "name_span": 1,
+    "single_token_divergence": true,
+    "camel_ids": [
+      1474
+    ],
+    "snake_ids": [
+      3317
+    ]
+  },
+  {
+    "camel": "filterOrder",
+    "snake": "filter_order",
+    "total_tokens": 4,
+    "decision_index": 3,
+    "name_span": 1,
+    "single_token_divergence": true,
+    "camel_ids": [
+      4431
+    ],
+    "snake_ids": [
+      7869
+    ]
+  },
+  {
+    "camel": "filterSession",
+    "snake": "filter_session",
+    "total_tokens": 4,
+    "decision_index": 3,
+    "name_span": 1,
+    "single_token_divergence": true,
+    "camel_ids": [
+      5283
+    ],
+    "snake_ids": [
+      12316
+    ]
+  },
+  {
+    "camel": "filterToken",
+    "snake": "filter_token",
+    "total_tokens": 4,
+    "decision_index": 3,
+    "name_span": 1,
+    "single_token_divergence": true,
+    "camel_ids": [
+      3323
+    ],
+    "snake_ids": [
+      6458
+    ]
+  },
+  {
+    "camel": "filterPayment",
+    "snake": "filter_payment",
+    "total_tokens": 4,
+    "decision_index": 3,
+    "name_span": 1,
+    "single_token_divergence": true,
+    "camel_ids": [
+      20188
+    ],
+    "snake_ids": [
+      26696
+    ]
+  },
+  {
+    "camel": "filterInvoice",
+    "snake": "filter_invoice",
+    "total_tokens": 4,
+    "decision_index": 3,
+    "name_span": 1,
+    "single_token_divergence": true,
+    "camel_ids": [
+      34674
+    ],
+    "snake_ids": [
+      39225
+    ]
+  },
+  {
+    "camel": "filterUserOrder",
+    "snake": "filter_user_order",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      1474,
+      4431
+    ],
+    "snake_ids": [
+      3317,
+      7869
+    ]
+  },
+  {
+    "camel": "filterOrderItem",
+    "snake": "filter_order_item",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      4431,
+      1234
+    ],
+    "snake_ids": [
+      7869,
+      5634
+    ]
+  },
+  {
+    "camel": "filterPaymentMethod",
+    "snake": "filter_payment_method",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      20188,
+      3523
+    ],
+    "snake_ids": [
+      26696,
+      9032
+    ]
+  },
+  {
+    "camel": "filterSessionToken",
+    "snake": "filter_session_token",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      5283,
+      3323
+    ],
+    "snake_ids": [
+      12316,
+      6458
+    ]
+  },
+  {
+    "camel": "filterCacheEntry",
+    "snake": "filter_cache_entry",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      8233,
+      5874
+    ],
+    "snake_ids": [
+      11529,
+      9078
+    ]
+  },
+  {
+    "camel": "filterShippingAddress",
+    "snake": "filter_shipping_address",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      43356,
+      4286
+    ],
+    "snake_ids": [
+      53553,
+      6744
+    ]
+  },
+  {
+    "camel": "filterOrderHistory",
+    "snake": "filter_order_history",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      4431,
+      13424
+    ],
+    "snake_ids": [
+      7869,
+      19802
+    ]
+  },
+  {
+    "camel": "filterBillingRecord",
+    "snake": "filter_billing_record",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      82007,
+      6471
+    ],
+    "snake_ids": [
+      87807,
+      14192
+    ]
+  },
+  {
+    "camel": "filterAuthHeader",
+    "snake": "filter_auth_header",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      5087,
+      4047
+    ],
+    "snake_ids": [
+      14014,
+      8757
+    ]
+  },
+  {
+    "camel": "countUser",
+    "snake": "count_user",
+    "total_tokens": 4,
+    "decision_index": 3,
+    "name_span": 1,
+    "single_token_divergence": true,
+    "camel_ids": [
+      1474
+    ],
+    "snake_ids": [
+      3317
+    ]
+  },
+  {
+    "camel": "countOrder",
+    "snake": "count_order",
+    "total_tokens": 4,
+    "decision_index": 3,
+    "name_span": 1,
+    "single_token_divergence": true,
+    "camel_ids": [
+      4431
+    ],
+    "snake_ids": [
+      7869
+    ]
+  },
+  {
+    "camel": "countSession",
+    "snake": "count_session",
+    "total_tokens": 4,
+    "decision_index": 3,
+    "name_span": 1,
+    "single_token_divergence": true,
+    "camel_ids": [
+      5283
+    ],
+    "snake_ids": [
+      12316
+    ]
+  },
+  {
+    "camel": "countToken",
+    "snake": "count_token",
+    "total_tokens": 4,
+    "decision_index": 3,
+    "name_span": 1,
+    "single_token_divergence": true,
+    "camel_ids": [
+      3323
+    ],
+    "snake_ids": [
+      6458
+    ]
+  },
+  {
+    "camel": "countPayment",
+    "snake": "count_payment",
+    "total_tokens": 4,
+    "decision_index": 3,
+    "name_span": 1,
+    "single_token_divergence": true,
+    "camel_ids": [
+      20188
+    ],
+    "snake_ids": [
+      26696
+    ]
+  },
+  {
+    "camel": "countInvoice",
+    "snake": "count_invoice",
+    "total_tokens": 4,
+    "decision_index": 3,
+    "name_span": 1,
+    "single_token_divergence": true,
+    "camel_ids": [
+      34674
+    ],
+    "snake_ids": [
+      39225
+    ]
+  },
+  {
+    "camel": "countUserOrder",
+    "snake": "count_user_order",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      1474,
+      4431
+    ],
+    "snake_ids": [
+      3317,
+      7869
+    ]
+  },
+  {
+    "camel": "countOrderItem",
+    "snake": "count_order_item",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      4431,
+      1234
+    ],
+    "snake_ids": [
+      7869,
+      5634
+    ]
+  },
+  {
+    "camel": "countPaymentMethod",
+    "snake": "count_payment_method",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      20188,
+      3523
+    ],
+    "snake_ids": [
+      26696,
+      9032
+    ]
+  },
+  {
+    "camel": "countSessionToken",
+    "snake": "count_session_token",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      5283,
+      3323
+    ],
+    "snake_ids": [
+      12316,
+      6458
+    ]
+  },
+  {
+    "camel": "countCacheEntry",
+    "snake": "count_cache_entry",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      8233,
+      5874
+    ],
+    "snake_ids": [
+      11529,
+      9078
+    ]
+  },
+  {
+    "camel": "countShippingAddress",
+    "snake": "count_shipping_address",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      43356,
+      4286
+    ],
+    "snake_ids": [
+      53553,
+      6744
+    ]
+  },
+  {
+    "camel": "countOrderHistory",
+    "snake": "count_order_history",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      4431,
+      13424
+    ],
+    "snake_ids": [
+      7869,
+      19802
+    ]
+  },
+  {
+    "camel": "countBillingRecord",
+    "snake": "count_billing_record",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      82007,
+      6471
+    ],
+    "snake_ids": [
+      87807,
+      14192
+    ]
+  },
+  {
+    "camel": "countAuthHeader",
+    "snake": "count_auth_header",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      5087,
+      4047
+    ],
+    "snake_ids": [
+      14014,
+      8757
+    ]
+  },
+  {
+    "camel": "syncUser",
+    "snake": "sync_user",
+    "total_tokens": 4,
+    "decision_index": 3,
+    "name_span": 1,
+    "single_token_divergence": true,
+    "camel_ids": [
+      1474
+    ],
+    "snake_ids": [
+      3317
+    ]
+  },
+  {
+    "camel": "syncOrder",
+    "snake": "sync_order",
+    "total_tokens": 4,
+    "decision_index": 3,
+    "name_span": 1,
+    "single_token_divergence": true,
+    "camel_ids": [
+      4431
+    ],
+    "snake_ids": [
+      7869
+    ]
+  },
+  {
+    "camel": "syncSession",
+    "snake": "sync_session",
+    "total_tokens": 4,
+    "decision_index": 3,
+    "name_span": 1,
+    "single_token_divergence": true,
+    "camel_ids": [
+      5283
+    ],
+    "snake_ids": [
+      12316
+    ]
+  },
+  {
+    "camel": "syncToken",
+    "snake": "sync_token",
+    "total_tokens": 4,
+    "decision_index": 3,
+    "name_span": 1,
+    "single_token_divergence": true,
+    "camel_ids": [
+      3323
+    ],
+    "snake_ids": [
+      6458
+    ]
+  },
+  {
+    "camel": "syncPayment",
+    "snake": "sync_payment",
+    "total_tokens": 4,
+    "decision_index": 3,
+    "name_span": 1,
+    "single_token_divergence": true,
+    "camel_ids": [
+      20188
+    ],
+    "snake_ids": [
+      26696
+    ]
+  },
+  {
+    "camel": "syncInvoice",
+    "snake": "sync_invoice",
+    "total_tokens": 4,
+    "decision_index": 3,
+    "name_span": 1,
+    "single_token_divergence": true,
+    "camel_ids": [
+      34674
+    ],
+    "snake_ids": [
+      39225
+    ]
+  },
+  {
+    "camel": "syncUserOrder",
+    "snake": "sync_user_order",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      1474,
+      4431
+    ],
+    "snake_ids": [
+      3317,
+      7869
+    ]
+  },
+  {
+    "camel": "syncOrderItem",
+    "snake": "sync_order_item",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      4431,
+      1234
+    ],
+    "snake_ids": [
+      7869,
+      5634
+    ]
+  },
+  {
+    "camel": "syncPaymentMethod",
+    "snake": "sync_payment_method",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      20188,
+      3523
+    ],
+    "snake_ids": [
+      26696,
+      9032
+    ]
+  },
+  {
+    "camel": "syncSessionToken",
+    "snake": "sync_session_token",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      5283,
+      3323
+    ],
+    "snake_ids": [
+      12316,
+      6458
+    ]
+  },
+  {
+    "camel": "syncCacheEntry",
+    "snake": "sync_cache_entry",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      8233,
+      5874
+    ],
+    "snake_ids": [
+      11529,
+      9078
+    ]
+  },
+  {
+    "camel": "syncShippingAddress",
+    "snake": "sync_shipping_address",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      43356,
+      4286
+    ],
+    "snake_ids": [
+      53553,
+      6744
+    ]
+  },
+  {
+    "camel": "syncOrderHistory",
+    "snake": "sync_order_history",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      4431,
+      13424
+    ],
+    "snake_ids": [
+      7869,
+      19802
+    ]
+  },
+  {
+    "camel": "syncBillingRecord",
+    "snake": "sync_billing_record",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      82007,
+      6471
+    ],
+    "snake_ids": [
+      87807,
+      14192
+    ]
+  },
+  {
+    "camel": "syncAuthHeader",
+    "snake": "sync_auth_header",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      5087,
+      4047
+    ],
+    "snake_ids": [
+      14014,
+      8757
+    ]
+  },
+  {
+    "camel": "exportUser",
+    "snake": "export_user",
+    "total_tokens": 4,
+    "decision_index": 3,
+    "name_span": 1,
+    "single_token_divergence": true,
+    "camel_ids": [
+      1474
+    ],
+    "snake_ids": [
+      3317
+    ]
+  },
+  {
+    "camel": "exportOrder",
+    "snake": "export_order",
+    "total_tokens": 4,
+    "decision_index": 3,
+    "name_span": 1,
+    "single_token_divergence": true,
+    "camel_ids": [
+      4431
+    ],
+    "snake_ids": [
+      7869
+    ]
+  },
+  {
+    "camel": "exportSession",
+    "snake": "export_session",
+    "total_tokens": 4,
+    "decision_index": 3,
+    "name_span": 1,
+    "single_token_divergence": true,
+    "camel_ids": [
+      5283
+    ],
+    "snake_ids": [
+      12316
+    ]
+  },
+  {
+    "camel": "exportToken",
+    "snake": "export_token",
+    "total_tokens": 4,
+    "decision_index": 3,
+    "name_span": 1,
+    "single_token_divergence": true,
+    "camel_ids": [
+      3323
+    ],
+    "snake_ids": [
+      6458
+    ]
+  },
+  {
+    "camel": "exportPayment",
+    "snake": "export_payment",
+    "total_tokens": 4,
+    "decision_index": 3,
+    "name_span": 1,
+    "single_token_divergence": true,
+    "camel_ids": [
+      20188
+    ],
+    "snake_ids": [
+      26696
+    ]
+  },
+  {
+    "camel": "exportInvoice",
+    "snake": "export_invoice",
+    "total_tokens": 4,
+    "decision_index": 3,
+    "name_span": 1,
+    "single_token_divergence": true,
+    "camel_ids": [
+      34674
+    ],
+    "snake_ids": [
+      39225
+    ]
+  },
+  {
+    "camel": "exportUserOrder",
+    "snake": "export_user_order",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      1474,
+      4431
+    ],
+    "snake_ids": [
+      3317,
+      7869
+    ]
+  },
+  {
+    "camel": "exportOrderItem",
+    "snake": "export_order_item",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      4431,
+      1234
+    ],
+    "snake_ids": [
+      7869,
+      5634
+    ]
+  },
+  {
+    "camel": "exportPaymentMethod",
+    "snake": "export_payment_method",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      20188,
+      3523
+    ],
+    "snake_ids": [
+      26696,
+      9032
+    ]
+  },
+  {
+    "camel": "exportSessionToken",
+    "snake": "export_session_token",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      5283,
+      3323
+    ],
+    "snake_ids": [
+      12316,
+      6458
+    ]
+  },
+  {
+    "camel": "exportCacheEntry",
+    "snake": "export_cache_entry",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      8233,
+      5874
+    ],
+    "snake_ids": [
+      11529,
+      9078
+    ]
+  },
+  {
+    "camel": "exportShippingAddress",
+    "snake": "export_shipping_address",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      43356,
+      4286
+    ],
+    "snake_ids": [
+      53553,
+      6744
+    ]
+  },
+  {
+    "camel": "exportOrderHistory",
+    "snake": "export_order_history",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      4431,
+      13424
+    ],
+    "snake_ids": [
+      7869,
+      19802
+    ]
+  },
+  {
+    "camel": "exportBillingRecord",
+    "snake": "export_billing_record",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      82007,
+      6471
+    ],
+    "snake_ids": [
+      87807,
+      14192
+    ]
+  },
+  {
+    "camel": "exportAuthHeader",
+    "snake": "export_auth_header",
+    "total_tokens": 5,
+    "decision_index": 3,
+    "name_span": 2,
+    "single_token_divergence": false,
+    "camel_ids": [
+      5087,
+      4047
+    ],
+    "snake_ids": [
+      14014,
+      8757
+    ]
+  }
+]

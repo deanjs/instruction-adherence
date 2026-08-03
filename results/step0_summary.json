@@ -1,0 +1,29 @@
+{
+  "model": "Qwen/Qwen2.5-Coder-7B-Instruct",
+  "contexts": {
+    "bare": {
+      "n_candidates": 396,
+      "n_matched": 325,
+      "match_rate_pct": 82.07,
+      "n_single_token_divergence": 129
+    },
+    "def": {
+      "n_candidates": 396,
+      "n_matched": 316,
+      "match_rate_pct": 79.8,
+      "n_single_token_divergence": 125
+    },
+    "def_in_class": {
+      "n_candidates": 396,
+      "n_matched": 316,
+      "match_rate_pct": 79.8,
+      "n_single_token_divergence": 125
+    },
+    "with_code": {
+      "n_candidates": 396,
+      "n_matched": 316,
+      "match_rate_pct": 79.8,
+      "n_single_token_divergence": 125
+    }
+  }
+}
