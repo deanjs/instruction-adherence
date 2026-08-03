@@ -1,1 +1,4 @@
 transformers>=4.51.0
+# Step 1 이후 모델 추론에 필요 (Colab에는 사전 설치돼 있음)
+torch>=2.1.0
+accelerate>=0.26.0
