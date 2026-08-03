@@ -3,12 +3,14 @@
 관찰은 **실험별로 나눠** 각 실험 문서 끝의 "관찰 기록" 절에 날짜와 함께 남긴다.
 (이 파일은 흩어진 기록을 한눈에 찾는 색인이다.)
 
-| 실험 | 관찰 기록 위치 |
+| 단계 / 실험 | 관찰 기록 위치 |
 |---|---|
 | 예비실험 (Step 0/1, exp1 파일럿) | [`experiments/00_예비실험.md`](experiments/00_예비실험.md#관찰-기록-예비실험) |
-| 실험 1 | [`experiments/01_실험1.md`](experiments/01_실험1.md#관찰-기록-실험-1) |
-| 실험 2 | [`experiments/02_실험2.md`](experiments/02_실험2.md#관찰-기록-실험-2) |
-| 실험 3 | [`experiments/03_실험3.md`](experiments/03_실험3.md#관찰-기록-실험-3) |
+| 1단계 · 실험 1 | [`experiments/01_실험1.md`](experiments/01_실험1.md#관찰-기록-실험-1) |
+| 1단계 · 실험 2 | [`experiments/02_실험2.md`](experiments/02_실험2.md#관찰-기록-실험-2) |
+| 1단계 · 실험 3 | [`experiments/03_실험3.md`](experiments/03_실험3.md#관찰-기록-실험-3) |
+| 2단계 · attention 관측 | [`experiments/04_attention관측.md`](experiments/04_attention관측.md#관찰-기록-2단계) |
+| 3단계 · attention 개입 | [`experiments/05_attention개입.md`](experiments/05_attention개입.md#관찰-기록-3단계) |
 
 전체 로드맵은 [`experiments/README.md`](experiments/README.md).
 
