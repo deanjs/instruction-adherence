@@ -539,7 +539,7 @@ def observe_session(model, tokenizer, torch, compliant_remaining, seed, args):
     }
 
 
-def print_observe_summary(out_path, levels):
+def _load_observe_rows(out_path):
     rows = []
     if os.path.exists(out_path):
         with open(out_path) as f:
@@ -549,6 +549,11 @@ def print_observe_summary(out_path, levels):
                     r = json.loads(line)
                     if r.get("design_version") == DESIGN_VERSION:
                         rows.append(r)
+    return rows
+
+
+def print_observe_summary(out_path, levels):
+    rows = _load_observe_rows(out_path)
     if not rows:
         print(f"(design_version={DESIGN_VERSION} 레코드 없음: {out_path})")
         return
@@ -578,12 +583,78 @@ def print_observe_summary(out_path, levels):
     print("  ※ 유의성은 JSONL을 조건 대비로 별도 검정. attention 크기 ≠ 인과(계획서 3.7).")
 
 
+def print_layer_summary(out_path, levels, top_n):
+    """층별 진단 — 전체 평균이 평탄해도 특정 층에서 조건이 갈리는지 본다.
+
+    각 구간에 대해 층별로 조건(levels) 값을 세션 평균하고,
+    Δ = (가장 위반 많은 조건) − (가장 준수 많은 조건) 로 정렬해 |Δ| 큰 층을 보여준다.
+      - 지침(NIAR):   H5면 위반↑에서 낮아짐 → Δ 음수 기대
+      - 위반코드(NVCAR): H6 방향이면 위반↑에서 높아짐 → Δ 양수 기대
+    층 전부 평탄(|Δ|≈0)이면 coarse 수준에서 신호 없음.
+    """
+    rows = _load_observe_rows(out_path)
+    if not rows:
+        print(f"(design_version={DESIGN_VERSION} 레코드 없음: {out_path})")
+        return
+
+    lo, hi = max(levels), min(levels)   # lo=가장 준수(4), hi=가장 위반(0)
+    cell = {}
+    for r in rows:
+        cell.setdefault(r["compliant_remaining"], []).append(r)
+
+    def mean(xs):
+        xs = [x for x in xs if x is not None]
+        return sum(xs) / len(xs) if xs else None
+
+    # 등장하는 층 번호 수집
+    layers = set()
+    for r in rows:
+        for seg_map in r.get("layer_profile", {}).values():
+            layers.update(int(k) for k in seg_map)
+    layers = sorted(layers)
+
+    def layer_val(cr, seg, layer):
+        vals = []
+        for s in cell.get(cr, []):
+            lp = s.get("layer_profile", {}).get(seg, {})
+            v = lp.get(str(layer), lp.get(layer))
+            if v is not None:
+                vals.append(v)
+        return mean(vals)
+
+    names = ["instruction", "prefix_code", "violation_code"]
+    labels = {"instruction": "지침 NIAR", "prefix_code": "선행코드 NSCAR",
+              "violation_code": "위반코드 NVCAR"}
+    print(f"\n=== 층별 진단 [{DESIGN_VERSION}] / Δ = 조건{hi}(위반多) − 조건{lo}(준수多) ===")
+    print(f"세션수: " + ", ".join(f"cr{cr}={len(cell.get(cr, []))}" for cr in levels))
+    for nm in names:
+        deltas = []
+        for L in layers:
+            a, b = layer_val(hi, nm, L), layer_val(lo, nm, L)
+            if a is not None and b is not None:
+                deltas.append((L, a - b, b, a))
+        if not deltas:
+            continue
+        deltas.sort(key=lambda t: abs(t[1]), reverse=True)
+        max_abs = deltas[0][1]
+        print(f"\n  [{labels[nm]}] |Δ| 최대 층 = L{deltas[0][0]} (Δ={max_abs:+.3f})  "
+              f"— 전 층 평탄이면 이 값이 0 근처")
+        print(f"    {'층':>4} {'조건'+str(lo):>8} {'조건'+str(hi):>8} {'Δ(hi−lo)':>9}")
+        for L, d, b, a in deltas[:top_n]:
+            print(f"    L{L:<3d} {b:8.3f} {a:8.3f} {d:+9.3f}")
+    print("\n  해석: 어느 구간이든 |Δ| 큰 층이 있으면 그 층에 조건 신호 → 정밀 재측정 대상.")
+    print("        전 구간·전 층에서 |Δ|≈0 이면 coarse 수준 null (측정창=naming step 검토).")
+
+
 def run_observe(args):
     os.makedirs(os.path.dirname(os.path.abspath(args.out)), exist_ok=True)
     max_cr = len(PREFIX_FUNCS)
     if any(cr < 0 or cr > max_cr for cr in args.levels):
         sys.exit(f"--levels 는 0~{max_cr} 범위: {args.levels}")
 
+    if args.layer_summary:
+        print_layer_summary(args.out, args.levels, args.top_layers)
+        return
     if args.summary_only:
         print_observe_summary(args.out, args.levels)
         return
@@ -591,13 +662,14 @@ def run_observe(args):
     import torch
     from transformers import AutoModelForCausalLM, AutoTokenizer
 
+    model_id = args.model or OBSERVE_MODEL     # --model 미지정이면 exp1과 동일한 3B
     if not torch.cuda.is_available():
-        print("경고: CUDA 없음. attention 관측은 GPU 런타임이 필요하다.", file=sys.stderr)
-    if "int8" in args.model.lower() or "4bit" in args.model.lower():
+        sys.exit("CUDA 없음 — Colab을 GPU 런타임(T4)으로 바꿔라. "
+                 "attention 관측은 GPU 필수(fp16, CPU 불가).")
+    if "int8" in model_id.lower() or "4bit" in model_id.lower():
         sys.exit("양자화 모델 금지 — activation 노이즈로 관측이 흔들린다(CLAUDE.md).")
 
     register_attention()
-    model_id = args.model
     seeds = [args.base_seed + k for k in range(args.n_seeds)]
     done = load_done(args.out)
     pending = [(cr, s) for cr in args.levels for s in seeds
@@ -650,6 +722,10 @@ def main():
                     help="‖α·v‖ 보완 지표도 캡처(Kobayashi 2020)")
     ap.add_argument("--out", default=DEFAULT_OUT)
     ap.add_argument("--summary-only", action="store_true")
+    ap.add_argument("--layer-summary", action="store_true",
+                    help="층별 진단(조건 hi−lo Δ). 전체 평균이 평탄할 때 어느 층에서 갈리는지")
+    ap.add_argument("--top-layers", type=int, default=8,
+                    help="--layer-summary에서 |Δ| 상위 몇 개 층을 보일지")
     # 검증
     ap.add_argument("--dtype", choices=["float16", "float32"], default="float32",
                     help="검증 정밀도. fp32면 tight tolerance")
