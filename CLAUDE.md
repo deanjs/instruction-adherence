@@ -90,9 +90,10 @@ results/     실행 결과 — 사전 등록 기록. 절대 삭제·수정하지
 3. **개입 실험 pair는 토큰 수가 정확히 일치해야 한다.** 1토큰 차이도 허용 안 됨.
    행동 실험의 ±3 토큰 허용 오차를 개입에 적용하지 말 것.
 
-4. **P1a는 KV group 단위(4개), P2/P1b/P3는 query head 단위(28개).**
-   Qwen2.5-Coder는 GQA라 K/V를 query head 7개가 공유한다.
-   P1a를 query head 단위로 짜면 실제로는 7개를 동시에 건드리면서 1개로 보고하게 된다.
+4. **P1a는 KV group 단위, P2/P1b/P3는 query head 단위.**
+   Qwen2.5-Coder는 GQA라 K/V를 여러 query head가 공유한다.
+   실행 모델 3B는 query head 16 / KV head 2 (8:1 공유), 7B는 28 / 4 (7:1). head 수는 config에서 읽는다.
+   P1a를 query head 단위로 짜면 실제로는 group 공유 head(3B 8개)를 동시에 건드리면서 1개로 보고하게 된다.
 
 5. **`results/` 아래 사전 등록 파일은 수정하지 않는다.**
    재생성이 필요하면 새 파일명으로 만들고 기존 것은 남긴다.

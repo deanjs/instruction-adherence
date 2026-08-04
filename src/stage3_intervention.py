@@ -14,8 +14,9 @@ CLAUDE.md "절대 어기면 안 되는 것"을 코드로 강제한다:
       실제 생성 이름과 절대 섞지 않는다(그건 행동 판정용, 여기선 안 씀).
   (3) 개입 pair는 토큰 수 정확 일치. ±3 허용 없음.
       두 조건 프롬프트를 토큰 정렬 assert로 검증, 이름 토큰 밖에서 다르면 폐기.
-  (4) **P1a는 KV group 단위(=KV head 4개), P2는 query head 단위(28개).**
-      GQA(7:1 공유)라 P1a를 query head로 짜면 7개를 건드리며 1개로 보고하게 된다.
+  (4) **P1a는 KV group 단위, P2는 query head 단위.** (실행 3B: KV head 2, query head 16, 8:1 공유.
+      7B면 4/28/7:1. head 수는 config에서 읽으므로 코드는 크기 무관.)
+      GQA라 P1a를 query head로 짜면 group 공유 head(3B 8개)를 함께 건드리며 1개로 보고하게 된다.
       → P1a는 pre-repeat key/value(b, kvh, kv, d)의 kvh 축을 인덱싱(=KV group).
         P2는 post-softmax α(b, H, q, kv)의 H 축을 인덱싱(=query head).
   (5) results/ 사전 등록 파일 수정 금지 → 새 파일(stage3_intervention.jsonl).
