@@ -1068,15 +1068,30 @@ def print_summary(out_path, n_boot=2000):
     null_layer_effects = [eff for li, eff in per_layer.items()
                           if li != main_layer and eff is not None]
 
-    def layer_tail_p(eff):
-        if eff is None or not null_layer_effects:
+    # 깊이-제한 귀무: 단일 층 이식은 downstream 전파돼 초기 층이 자명히 full 회복을 만든다
+    # (파일럿에서 L0≈full 확인). 공정한 비교는 **전파 깊이가 비슷한 후기 층끼리** →
+    # 전 층 절반 이후(≥ n_layers//2) 층들의 효과 분포를 주 귀무로 쓴다.
+    n_layers = (max(per_layer) + 1) if per_layer else 0
+    depth_th = n_layers // 2
+    null_late = [eff for li, eff in per_layer.items()
+                 if li != main_layer and li >= depth_th and eff is not None]
+
+    def _tail_p(eff, null):
+        if eff is None or not null:
             return None
-        ge = sum(1 for x in null_layer_effects if x is not None and x >= eff)
-        return (ge + 1) / (len(null_layer_effects) + 1)
+        ge = sum(1 for x in null if x is not None and x >= eff)
+        return (ge + 1) / (len(null) + 1)
+
+    def layer_tail_p(eff):
+        return _tail_p(eff, null_layer_effects)
+
+    def late_tail_p(eff):
+        return _tail_p(eff, null_late)
 
     # ── P1a 주 결과 ──
-    print("\n── P1a (코드 K/V 이식) ──")
-    print(f"{'config':26s} {'평균Δ':>9s} {'95%CI':>20s} {'RecovRatio':>11s} {'층귀무p':>8s}")
+    print("\n── P1a (코드 K/V 이식) ──   [후기귀무p = 전파-강건 주 판정 / 전층p = 참고]")
+    print(f"{'config':26s} {'평균Δ':>9s} {'95%CI':>20s} {'RecovR':>8s} "
+          f"{'후기귀무p':>9s} {'전층p':>7s}")
     p1a_keys = [f"p1a_L{main_layer}_allG", "p1a_full"] + \
                sorted(k for k in by_cfg if k.startswith("p1a_L") and k.endswith("_allG")
                       and k != f"p1a_L{main_layer}_allG")
@@ -1088,12 +1103,24 @@ def print_summary(out_path, n_boot=2000):
         li = None
         if ckey.startswith("p1a_L") and ckey.endswith("_allG"):
             li = int(ckey[len("p1a_L"):-len("_allG")])
-        p = layer_tail_p(per_layer.get(li)) if li is not None else None
-        star = "  ← 주(L25)" if li == main_layer else (" (상한)" if ckey == "p1a_full" else "")
+        pf = layer_tail_p(per_layer.get(li)) if li is not None else None
+        pl = (late_tail_p(per_layer.get(li))
+              if (li is not None and li >= depth_th) else None)
+        star = ("  ← 주(L25)" if li == main_layer
+                else (" (상한)" if ckey == "p1a_full" else ""))
         ci = f"[{lo:+.4f},{hi:+.4f}]" if lo is not None else ""
         rr_s = f"{rr[0]:+.2f}" if rr[0] is not None else "-"
-        p_s = f"{p:.4f}" if p is not None else "-"
-        print(f"{ckey:26s} {m:+.4f} {ci:>20s} {rr_s:>11s} {p_s:>8s}{star}")
+        pl_s = f"{pl:.4f}" if pl is not None else "  -  "
+        pf_s = f"{pf:.4f}" if pf is not None else "-"
+        print(f"{ckey:26s} {m:+.4f} {ci:>20s} {rr_s:>8s} {pl_s:>9s} {pf_s:>7s}{star}")
+
+    p_late_main = late_tail_p(per_layer.get(main_layer))
+    p_full_main = layer_tail_p(per_layer.get(main_layer))
+    pl_str = f"{p_late_main:.4f}" if p_late_main is not None else "-"
+    pf_str = f"{p_full_main:.4f}" if p_full_main is not None else "-"
+    print(f"\n★ 주 판정(전파-강건): L{main_layer} vs 후기 층(≥L{depth_th}, "
+          f"n={len(null_late)}) 귀무 → p = {pl_str}")
+    print(f"  (참고) 전 층 귀무 p = {pf_str} — 초기 층 전파 오염으로 보수적, 주 판정 아님")
 
     # ── 단계적 범위(보조) — 이름 토큰 vs 전파 표현 구분 ──
     print("\n── L25 단계적 범위 (name ⊂ func ⊂ code) ──")
@@ -1126,8 +1153,10 @@ def print_summary(out_path, n_boot=2000):
         print(f"  단조 추세(Spearman ρ, λ vs Δ) = "
               f"{rho:+.3f}" if rho is not None else "  추세: -")
 
-    print("\n※ 주 판정: p1a_L{}_allG 효과가 나머지 층(같은 규모) 귀무분포의 상위 꼬리인가."
+    print("\n※ 주 판정: L{}_allG 효과가 **후기 층 귀무분포**의 상위 꼬리인가(전파-강건)."
           .format(main_layer))
+    print("  단일 층 이식은 downstream 전파돼 초기 층이 자명히 full 회복 → 전 층 귀무는 오염됨.")
+    print("※ 보강 인과 근거: 대조=0(특이성) + 단계 범위 name⊂func⊂code(용량-반응).")
     print("※ 건전성: ctl_noop=0(정확)·ctl_instr·ctl_boiler≈0(조건 간 동일 영역).")
     print("※ CI는 two-way(이름쌍×seed) cluster bootstrap. "
           "RecoveryRatio=config 효과 ÷ A분할 gap(분자·분모 독립 부트).")
