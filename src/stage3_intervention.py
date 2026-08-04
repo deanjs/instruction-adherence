@@ -556,22 +556,28 @@ def prepare_session(model, tokenizer, torch, ctx_pair, decision, seed, companion
             out = model(input_ids=inp, use_cache=True)
         kv[s] = _extract_kv(out.past_key_values)
 
-    # 무작위 donor(길이 일치·비동일 clean K/V) — 주 인과 검정의 강한 대조.
-    #   각 함수를 같은 total_tokens의 다른 pair로 교체한 clean(camel) 프롬프트를 prefill.
+    # 무작위 donor(길이 일치·비동일 clean K/V) — 인과·특이성 검정의 대조.
+    #   각 함수를 같은 total_tokens의 다른 pair로 교체한 프롬프트를 camel·snake **둘 다** prefill.
+    #     rand(camel): 내용 특이성 대조(comp vs rand-camel).
+    #     rand_snake : 스타일 특이성 대조(rand-camel vs rand-snake — 내용 무작위 고정, case만 차이).
     #   정렬(길이·code_pos)이 맞아야만 씀. 안 맞으면 None(대조 생략).
-    kv_rand = None
+    kv_rand = kv_rand_snake = None
     if pairs is not None:
         funcs = [ctx_pair] + list(companions)
         alt = rand_donor_funcs(pairs, funcs, seed_key=f"{ctx_pair['camel']}|{seed}")
         if alt is not None:
-            Pr = build_prompt(tokenizer, alt[0], "camel", seed, alt[1:])
-            if (len(Pr["input_ids"]) == len(a["input_ids"])
-                    and clip(Pr["code_pos"]) == code_pos):
-                inp = torch.tensor([Pr["input_ids"][:-1]], dtype=torch.long,
-                                   device=model.device)
-                with torch.no_grad():
-                    out = model(input_ids=inp, use_cache=True)
-                kv_rand = _extract_kv(out.past_key_values)
+            for style, slot in (("camel", "camel"), ("snake", "snake")):
+                Pr = build_prompt(tokenizer, alt[0], style, seed, alt[1:])
+                if (len(Pr["input_ids"]) == len(a["input_ids"])
+                        and clip(Pr["code_pos"]) == code_pos):
+                    inp = torch.tensor([Pr["input_ids"][:-1]], dtype=torch.long,
+                                       device=model.device)
+                    with torch.no_grad():
+                        out = model(input_ids=inp, use_cache=True)
+                    if slot == "camel":
+                        kv_rand = _extract_kv(out.past_key_values)
+                    else:
+                        kv_rand_snake = _extract_kv(out.past_key_values)
 
     return dict(
         ctx_pair=ctx_pair, seed=seed, n_ctx=len(companions) + 1,
@@ -580,7 +586,8 @@ def prepare_session(model, tokenizer, torch, ctx_pair, decision, seed, companion
         pos=pos, instr_pos=pos["instr"],
         yc_ids=yc, yv_ids=yv,
         kv_viol=kv["snake"], kv_comp=kv["camel"],   # 코드 구간 donor 추출용 prefill 캐시
-        kv_rand=kv_rand,                            # 무작위(길이일치·비동일) donor, 없으면 None
+        kv_rand=kv_rand,                            # 무작위 donor(camel), 없으면 None
+        kv_rand_snake=kv_rand_snake,                # 무작위 donor(snake), 없으면 None
         n_diff=len(diff), n_layers=len(kv["snake"]),
         n_kv_heads=kv["snake"][0][0].shape[1],
     ), None
@@ -723,6 +730,10 @@ def _configs_b(args, n_layers, n_kv_heads, n_q_heads):
         #   통제. 준수 donor(comp)가 이보다 유의하게 크면 → 회복이 준수-코드 내용에 특이적.
         cfgs.append((f"ctl_randdonor_L{main}", "p1a",
                      dict(pos="code", donor="rand", groups=None, layers=[main])))
+        # snake 스타일 무작위 donor — 내용은 rand와 같은 무작위, case만 snake.
+        #   rand(camel) vs rand_snake 대비로 **case-스타일**이 회복을 구동하는지 분리.
+        cfgs.append((f"ctl_randdonor_snake_L{main}", "p1a",
+                     dict(pos="code", donor="rand_snake", groups=None, layers=[main])))
         if args.sweep:
             # group별 국소화 — 후보 층에서 KV group 4개 단독.
             for li in [main] + aux:
@@ -757,7 +768,8 @@ def _apply_config(torch, sess, kind, params):
     """
     if kind == "p1a":
         src = {"comp": sess["kv_comp"], "self": sess["kv_viol"],
-               "rand": sess.get("kv_rand")}[params["donor"]]
+               "rand": sess.get("kv_rand"),
+               "rand_snake": sess.get("kv_rand_snake")}[params["donor"]]
         positions = sess["pos"][params["pos"]]
         donor = _slice_kv(src, positions)                    # 해당 위치 열 슬라이스
         iv_p1a(donor, positions, groups=params.get("groups"), layers=params.get("layers"))
@@ -799,7 +811,9 @@ def run_b(args):
                 key = ("B", ckey, pi, seed, args.model)
                 if key in done:
                     continue
-                if params.get("donor") == "rand" and sess.get("kv_rand") is None:
+                _dsrc = {"rand": "kv_rand", "rand_snake": "kv_rand_snake"}.get(
+                    params.get("donor"))
+                if _dsrc is not None and sess.get(_dsrc) is None:
                     append_jsonl(args.out, _skip_rec("B", ckey, pi, seed, ctx,
                                                      decision, args.model, "no_rand_donor"))
                     continue
@@ -1166,33 +1180,46 @@ def print_summary(out_path, n_boot=2000):
         cell[(r.get("ctx_camel"), r.get("seed"))][r["config_key"]] = r["delta"]
     main_key = f"p1a_L{main_layer}_allG"
     rand_key = f"ctl_randdonor_L{main_layer}"
+    rand_snake_key = f"ctl_randdonor_snake_L{main_layer}"
     late_keys = [f"p1a_L{li}_allG" for li in late_others]
 
-    def _contrast_rows(minus_keys, need_all=True):
-        """셀별 (Δ_main − minus의 평균)을 two-way boot용 rows로. minus 없으면 그 셀 제외."""
+    def _contrast_rows(minus_keys, plus_key=main_key, need_all=True):
+        """셀별 (Δ_plus − minus의 평균)을 two-way boot용 rows로. plus/minus 없으면 그 셀 제외."""
         out = []
         for (p, s), d in cell.items():
-            if main_key not in d:
+            if plus_key not in d:
                 continue
             present = [d[k] for k in minus_keys if k in d]
             if not present or (need_all and len(present) != len(minus_keys)):
                 continue
             out.append({"ctx_camel": p, "seed": s,
-                        "c": d[main_key] - sum(present) / len(present)})
+                        "c": d[plus_key] - sum(present) / len(present)})
         return out
 
     # ── 주 검정 (사전 등록) — 대응 대비의 two-way bootstrap CI ──
     print("\n══ 주 검정 (paired contrast, two-way boot 95%CI, 0 배제 여부) ══")
-    # (1) 인과·내용 특이성: L25 준수 donor vs 같은 L25 무작위(비동일 clean) donor.
-    caus_rows = _contrast_rows([rand_key])
-    if caus_rows:
-        cm, cb = _twoway_boot(caus_rows, "c", n_boot)
-        clo, chi = _ci(cb)
-        sig = "0 배제 ✅" if (clo is not None and clo > 0) else "0 포함 ❌"
-        print(f"① 인과·내용 특이성: Δ(L{main_layer} 준수) − Δ(L{main_layer} 무작위donor) "
-              f"= {cm:+.4f}  CI[{clo:+.4f},{chi:+.4f}]  → {sig}")
-    else:
-        print(f"① 인과·내용 특이성: 무작위 donor 대조 데이터 없음(ctl_randdonor_L{main_layer}) — 재실행 필요")
+
+    def _contrast_report(label, rows, note=""):
+        if not rows:
+            print(f"{label}: 데이터 없음 — 재실행 필요 {note}")
+            return
+        m, bt = _twoway_boot(rows, "c", n_boot)
+        lo, hi = _ci(bt)
+        sig = "0 배제 ✅" if (lo is not None and lo > 0) else \
+            ("0 배제(음수) ⚠️" if (hi is not None and hi < 0) else "0 포함 ❌")
+        print(f"{label} = {m:+.4f}  CI[{lo:+.4f},{hi:+.4f}]  → {sig}  {note}")
+
+    # ①a 내용 특이성: L25 준수 donor vs L25 무작위(camel) donor — 준수 '내용'이 특이적인가.
+    _contrast_report(f"①a 내용 특이성: Δ(L{main_layer} 준수) − Δ(무작위 camel)",
+                     _contrast_rows([rand_key]),
+                     note="(≈0/음수면 내용 무관 — camel이면 뭐든 회복)")
+    # ①b 스타일 특이성: 무작위 camel vs 무작위 snake — case 스타일이 회복을 구동하나(내용 고정).
+    _contrast_report(f"①b 스타일 특이성: Δ(무작위 camel) − Δ(무작위 snake)",
+                     _contrast_rows([rand_snake_key], plus_key=rand_key),
+                     note="(>0면 camelCase '스타일'이 회복 구동)")
+    # ①c 참고: L25 준수 vs 무작위 snake(내용·스타일 둘 다 다른 극단 대조).
+    _contrast_report(f"①c 준수 vs 무작위 snake: Δ(L{main_layer} 준수) − Δ(무작위 snake)",
+                     _contrast_rows([rand_snake_key]))
     # (2) 층 특이성: L25 vs 사전 고정 후기 층 평균(L{late_start}..) 대응 대비.
     spec_rows = _contrast_rows(late_keys)
     if spec_rows and late_keys:
@@ -1267,8 +1294,9 @@ def print_summary(out_path, n_boot=2000):
         print(f"  단조 추세(Spearman ρ, λ vs Δ) = "
               f"{rho:+.3f}" if rho is not None else "  추세: -")
 
-    print("\n※ 주 판정(사전 등록) = 위 ①②③ 대응 대비 CI가 0을 배제하는가:")
-    print("   ① 인과·내용 특이성(L25 준수 vs 무작위 donor)  ② 층 특이성(L25 vs 후기평균)  ③ 회복>0.")
+    print("\n※ 주 판정(사전 등록) = 대응 대비 CI 0 배제:")
+    print("   ①a 내용(준수 vs 무작위 camel)  ①b 스타일(무작위 camel vs snake)  ②층  ③회복>0.")
+    print("   특이성 수준: ①a>0=내용특이 / ①a≈0·①b>0=스타일(case)특이 / 둘 다≈0=아무 코드.")
     print("   순위 p(후기·전층)는 바닥 1/(n+1)이라 검정 아님 — 민감도·기술 근거로만.")
     print("※ 보강: 단계 범위 name⊂func⊂code(용량-반응) + P2 λ 단조.")
     print("※ 건전성: ctl_noop=0(정확)·ctl_instr·ctl_boiler≈0(조건 간 동일 영역).")
