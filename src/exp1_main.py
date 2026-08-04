@@ -8,7 +8,7 @@
   H1a: context의 위반 코드가 많을수록(= compliant 예시가 적을수록) 첫 함수의 준수율이 낮다.
        (파일럿에서 3B·weak 지침 기준 100→75→62→38→0으로 확인됨)
 
-조작 (계획서 6.1 재설계 — docs/experiments/01_실험1.md)
+조작 (계획서 6.1 재설계 — docs/experiments/01_행동실험.md)
   - 고정 크기 prefix(12함수) 안의 **남은 compliant(camel) 예시 수**를 조건으로 둔다.
     compliant_remaining ∈ {4,3,2,1,0}  (= snake 8/9/10/11/12개)
   - **핵심 통제:** 모든 조건에서 prefix 함수 수(12)가 같다 → "코드 양"이 아니라

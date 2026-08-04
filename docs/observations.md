@@ -6,11 +6,10 @@
 | 단계 / 실험 | 관찰 기록 위치 |
 |---|---|
 | 예비실험 (Step 0/1, exp1 파일럿) | [`experiments/00_예비실험.md`](experiments/00_예비실험.md#관찰-기록-예비실험) |
-| 1단계 · 실험 1 | [`experiments/01_실험1.md`](experiments/01_실험1.md#관찰-기록-실험-1) |
-| 1단계 · 실험 2 | [`experiments/02_실험2.md`](experiments/02_실험2.md#관찰-기록-실험-2) |
-| 1단계 · 실험 3 | [`experiments/03_실험3.md`](experiments/03_실험3.md#관찰-기록-실험-3) |
-| 2단계 · attention 관측 | [`experiments/04_attention관측.md`](experiments/04_attention관측.md#관찰-기록-2단계) |
-| 3단계 · attention 개입 | [`experiments/05_attention개입.md`](experiments/05_attention개입.md#관찰-기록-3단계) |
+| 1단계 · 01 행동실험 | [`experiments/01_행동실험.md`](experiments/01_행동실험.md#관찰-기록-실험-1) |
+| 2단계 · attention 관측 | [`experiments/02_attention관측.md`](experiments/02_attention관측.md#관찰-기록-2단계) |
+| 3단계 · attention 개입 | [`experiments/03_attention개입.md`](experiments/03_attention개입.md#관찰-기록-3단계) |
+| (보류) 추가 실험 A·B | [`experiments/추가실험.md`](experiments/추가실험.md#관찰-기록-추가-실험-a) |
 
 전체 로드맵은 [`experiments/README.md`](experiments/README.md).
 
