@@ -8,7 +8,7 @@ teacher-forcing 준수 선호 점수(`stage3_intervention.py`)는 '확률 선호
   (1) `--generate`  개입 아래 새 함수 이름을 생성 → **준수율**(camel 비율).
                     비교: 손상 vs L25 이식 vs 준수 baseline vs 무작위 donor(camel/snake) vs P2(λ↑/↓).
   (2) `--gen-chain` 개입 유지하며 함수 N개 **연쇄 생성** → **후속 위반 수**(자기증폭 연쇄를 끊나).
-                    비교: 손상 vs L25 이식 vs 준수 baseline.
+                    비교: 손상 vs L25 이식 vs L25 self 이식(no-op) vs 준수 baseline.
 
 개입·donor·정렬은 `stage3_intervention` 하네스를 그대로 재사용(같은 홀드아웃·다중 토글).
 생성 함수 이름 판정은 `step1_baseline`(ast 이름 추출 + case 분류).
@@ -229,6 +229,8 @@ def run_gen_chain(args):
         ("damaged", "base", None),
         ("compliant", "base_comp", None),
         (f"p1a_L{main}", "p1a", dict(pos="code", donor="comp", groups=None, layers=[main])),
+        # no-op 대조: 같은 L25 경로로 자기 K/V를 도로 넣음 → 변화 없어야 함(경로 자체의 부작용 배제).
+        (f"noop_L{main}", "p1a", dict(pos="code", donor="self", groups=None, layers=[main])),
     ]
 
     for li, ctx in enumerate(b_pairs):
@@ -349,12 +351,15 @@ def print_summary(out_path, n_boot=2000):
             lo, hi = _ci(boot)
             ci = f"[{lo:+.3f},{hi:+.3f}]" if lo is not None else ""
             print(f"{cfg:22s} {m:10.3f} {ci:>20s}  {len(g[cfg])}")
-        rr = _cells_paired(crows, "violation_count", f"p1a_L{main}", "damaged")
-        if rr:
-            m, boot = _twoway_boot(rr, "c", n_boot)
-            lo, hi = _ci(boot)
-            sig = "0 배제(감소) ✅" if (hi is not None and hi < 0) else "0 포함 ❌"
-            print(f"  Δ L{main} − 손상 위반수 = {m:+.3f}  CI[{lo:+.3f},{hi:+.3f}]  {sig}")
+        # L25 camel − 손상(효과), L25 camel − L25 self(no-op 특이성: 경로가 아니라 donor 내용/스타일)
+        for lab, a_c, b_c in ((f"L{main} − 손상", f"p1a_L{main}", "damaged"),
+                              (f"L{main} − L{main} self(no-op)", f"p1a_L{main}", f"noop_L{main}")):
+            rr = _cells_paired(crows, "violation_count", a_c, b_c)
+            if rr:
+                m, boot = _twoway_boot(rr, "c", n_boot)
+                lo, hi = _ci(boot)
+                sig = "0 배제(감소) ✅" if (hi is not None and hi < 0) else "0 포함 ❌"
+                print(f"  Δ {lab:24s} 위반수 = {m:+.3f}  CI[{lo:+.3f},{hi:+.3f}]  {sig}")
 
     if not grows and not crows:
         print(f"(레코드 없음: {out_path})")
