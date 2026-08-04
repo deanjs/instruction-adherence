@@ -51,15 +51,14 @@ context에 누적된 이전 코드를 규칙보다 우선해서 참조하기 때
   - 하네스: `src/stage2_attention.py`(`--validate`/`--observe`/`--content`/`--content2x2`), `notebooks/stage2_colab.ipynb`
   - 커널 검증 PASS(`--validate`, 1.5B fp32): eager 대조 2632쌍, 최대 절대오차 5.96e-07
   - 관측 100세션(`results/stage2_niar.jsonl`). 2×2로 "위반 상태" 효과 분리·개입 후보층 선정
-- [ ] **Step 3** — attention/KV 개입 (P1a·P2), 주 가설 H3. 계획서 3.5/3.6 (`stage3_intervention_v3`)
+- [x] **Step 3** — attention/KV 개입 (P1a·P2), 주 가설 **H3 확증**. 계획서 3.5/3.6 (`stage3_intervention_v3`)
   - 하네스: `src/stage3_intervention.py`(`--validate`/`--run-a`/`--run-b`/`--summary-only`), `notebooks/stage3_colab.ipynb`
-  - 게이트 PASS·**v2 파일럿에서 초기 층 downstream 전파로 전 층 교환가능성 위배 발견**(L0≈full) → v3
-  - **v3 사전 등록:** 파일럿(앞 10쌍) 확증 제외(`--pair-start 10` 홀드아웃). 후기 1/3 사전 고정
-  - **주 검정 = 대응 대비 two-way boot CI(0 배제):** ①L25 준수 vs **무작위 donor**(길이일치 비동일 clean) ②L25 vs 후기평균 ③회복>0. 전 층/후기 순위 p는 민감도(순위 p 바닥 존재)
-  - 준수 선호 점수=작업일치 고정 후보(formatValue/format_value), **전체 시퀀스 forward 채점**(캐시 재사용은 마스킹 버그로 폐기)
-  - 조작 강도: 주 pair + 동반 함께 토글(`--n-ctx`, 기본 8) — 단일 토글은 gap≈0(파일럿). 3B 기저 gap≈+3.17
-  - P1b/P3(탐색)는 미구현(주 가설 H3=P1a에 집중)
-- [ ] 이후 계획서 7장 일정 참조
+  - **v3 확증(3B, 홀드아웃 40쌍×3seed):** 기저 gap +3.17. L25 준수 이식 Δ=+2.49(회복 79%, CI 0배제)
+  - **핵심:** 무작위 donor(camel/snake) 대조로 특이성 못 박음 — L25 회복은 준수 **내용** 아니라 **camelCase 스타일**에 특이적(①a≈0, ①b=+2.47 유의, snake donor 무회복)
+  - P2: 지침 α×λ 부호 반전 단조 용량-반응(ρ=+1.0) — 독립적 인과 손잡이
+  - 상세·방법론 함정·관찰 기록은 `docs/experiments/05`
+  - P1b/P3(탐색)는 미구현. (선택) P2 국소화 `--sweep` 미실행
+- [ ] 이후 논문 정리 — 계획서 7장 일정
 
 ## 구조
 
