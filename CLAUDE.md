@@ -51,13 +51,13 @@ context에 누적된 이전 코드를 규칙보다 우선해서 참조하기 때
   - 하네스: `src/stage2_attention.py`(`--validate`/`--observe`/`--content`/`--content2x2`), `notebooks/stage2_colab.ipynb`
   - 커널 검증 PASS(`--validate`, 1.5B fp32): eager 대조 2632쌍, 최대 절대오차 5.96e-07
   - 관측 100세션(`results/stage2_niar.jsonl`). 2×2로 "위반 상태" 효과 분리·개입 후보층 선정
-- [ ] **Step 3** — attention/KV 개입 (P1a·P2), 주 가설 H3. 계획서 3.5/3.6 (`stage3_intervention_v2`)
+- [ ] **Step 3** — attention/KV 개입 (P1a·P2), 주 가설 H3. 계획서 3.5/3.6 (`stage3_intervention_v3`)
   - 하네스: `src/stage3_intervention.py`(`--validate`/`--run-a`/`--run-b`/`--summary-only`), `notebooks/stage3_colab.ipynb`
-  - **주 조건 = L25 단독 × 전 KV group** 코드 K/V 이식(2단계 재현 층). 전 층 각각 같은 규모로 돌려 L25 아닌 층이 규모-일치 귀무분포. `p1a_full`=회복 상한
-  - P2=query head α×λ 곡선(단조성)+층 국소. 준수 선호 점수=작업일치 고정 후보(formatValue/format_value) teacher forcing
-  - 조작 강도: 주 pair + 동반 matched pair 함께 토글(`--n-ctx`, 기본 8) — 단일 토글은 gap≈0(파일럿 확인)
-  - 음성 대조 전부 L25 규모·조건 간 동일 영역(no-op·지침·보일러플레이트). two-way cluster bootstrap(이름쌍×seed) CI·층 귀무·Recovery Ratio
-  - **Colab에서 `--validate` PASS → 10쌍 파일럿 → 본실험**(`--run-a`→`--run-b`) 순. 그 전엔 미완료
+  - 게이트 PASS·**v2 파일럿에서 초기 층 downstream 전파로 전 층 교환가능성 위배 발견**(L0≈full) → v3
+  - **v3 사전 등록:** 파일럿(앞 10쌍) 확증 제외(`--pair-start 10` 홀드아웃). 후기 1/3 사전 고정
+  - **주 검정 = 대응 대비 two-way boot CI(0 배제):** ①L25 준수 vs **무작위 donor**(길이일치 비동일 clean) ②L25 vs 후기평균 ③회복>0. 전 층/후기 순위 p는 민감도(순위 p 바닥 존재)
+  - 준수 선호 점수=작업일치 고정 후보(formatValue/format_value), **전체 시퀀스 forward 채점**(캐시 재사용은 마스킹 버그로 폐기)
+  - 조작 강도: 주 pair + 동반 함께 토글(`--n-ctx`, 기본 8) — 단일 토글은 gap≈0(파일럿). 3B 기저 gap≈+3.17
   - P1b/P3(탐색)는 미구현(주 가설 H3=P1a에 집중)
 - [ ] 이후 계획서 7장 일정 참조
 

@@ -70,8 +70,14 @@ from exp1_main import system_prompt, INSTRUCTION            # noqa: E402
 from exp1_pilot import INSTRUCTION_RULE, PREFIX_FUNCS        # noqa: E402
 from stage2_attention import _char_span_to_tokens, _repeat_kv  # noqa: E402  (정본 재사용)
 
-DESIGN_VERSION = "stage3_intervention_v2"   # v1(초안)과 안 섞이게 — L25 조건·규모일치 대조 추가
+DESIGN_VERSION = "stage3_intervention_v3"   # v2는 설계 파일럿(전파 교란 발견) → 확증서 분리
 ATTN_NAME = "stage3_intervene"        # AttentionInterface 등록 이름
+
+# 파일럿(설계용) 분리 — v2에서 B pair [:PILOT_PAIRS]로 파일럿을 돌렸으므로 확증은 그 뒤부터.
+PILOT_PAIRS = 10
+# 층-특이성 검정용 **사전 고정 후기 층 범위** — 모델의 마지막 1/3(결과 무관 구조 기준).
+#   전파 깊이가 비슷한 층끼리 비교. L25 주변 임의 선택이 아니라 2/3 컷오프로 고정.
+LATE_FRAC_CUT = 2.0 / 3.0
 
 RESULTS_DIR = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "results"
@@ -343,6 +349,28 @@ def companion_pairs(pairs, decision, n):
     return [pool[i] for i in comp_idx]
 
 
+def rand_donor_funcs(pairs, funcs, seed_key):
+    """session의 각 함수(주 pair + 동반)를 **같은 total_tokens의 다른 pair**로 교체.
+
+    무작위 donor 대조용 — L25에 넣을 "clean하지만 내용이 다른, 길이 일치" K/V의 출처.
+    같은 length라야 code_pos가 정렬돼 이식이 정의된다. 실패 시 None(대조 생략).
+    """
+    by_tt = {}
+    for p in pairs:
+        by_tt.setdefault(p.get("total_tokens"), []).append(p)
+    rng = random.Random(seed_key)
+    used = {f["camel"] for f in funcs}
+    alt = []
+    for f in funcs:
+        cands = [p for p in by_tt.get(f.get("total_tokens"), []) if p["camel"] not in used]
+        if not cands:
+            return None
+        pick = cands[rng.randrange(len(cands))]
+        used.add(pick["camel"])
+        alt.append(pick)
+    return alt
+
+
 def build_prompt(tokenizer, ctx_pair, ctx_style, seed, companions):
     """주 context pair + 동반 pair들을 ctx_style(camel=준수/snake=위반)로 **함께 토글**.
 
@@ -451,10 +479,12 @@ def pref_score(model, torch, ids, yc_ids, yv_ids):
 # 한 (context pair, seed) 세션 준비 — prefix 캐시·donor 1회 생성 후 재사용
 # ─────────────────────────────────────────────────────────────
 
-def prepare_session(model, tokenizer, torch, ctx_pair, decision, seed, companions):
+def prepare_session(model, tokenizer, torch, ctx_pair, decision, seed, companions,
+                    pairs=None):
     """위반/준수 두 조건의 prefix 캐시를 만들고 정렬을 검증한다.
 
     주 pair + 동반 pair들을 함께 토글(준수=전부 camel / 위반=전부 snake).
+    pairs가 주어지면 무작위 donor(같은 length 다른 pair들의 clean K/V)도 만든다.
     반환: dict 또는 (None, 사유).
     """
     P = {s: build_prompt(tokenizer, ctx_pair, s, seed, companions)
@@ -526,6 +556,23 @@ def prepare_session(model, tokenizer, torch, ctx_pair, decision, seed, companion
             out = model(input_ids=inp, use_cache=True)
         kv[s] = _extract_kv(out.past_key_values)
 
+    # 무작위 donor(길이 일치·비동일 clean K/V) — 주 인과 검정의 강한 대조.
+    #   각 함수를 같은 total_tokens의 다른 pair로 교체한 clean(camel) 프롬프트를 prefill.
+    #   정렬(길이·code_pos)이 맞아야만 씀. 안 맞으면 None(대조 생략).
+    kv_rand = None
+    if pairs is not None:
+        funcs = [ctx_pair] + list(companions)
+        alt = rand_donor_funcs(pairs, funcs, seed_key=f"{ctx_pair['camel']}|{seed}")
+        if alt is not None:
+            Pr = build_prompt(tokenizer, alt[0], "camel", seed, alt[1:])
+            if (len(Pr["input_ids"]) == len(a["input_ids"])
+                    and clip(Pr["code_pos"]) == code_pos):
+                inp = torch.tensor([Pr["input_ids"][:-1]], dtype=torch.long,
+                                   device=model.device)
+                with torch.no_grad():
+                    out = model(input_ids=inp, use_cache=True)
+                kv_rand = _extract_kv(out.past_key_values)
+
     return dict(
         ctx_pair=ctx_pair, seed=seed, n_ctx=len(companions) + 1,
         prefix_len=prefix_len,
@@ -533,6 +580,7 @@ def prepare_session(model, tokenizer, torch, ctx_pair, decision, seed, companion
         pos=pos, instr_pos=pos["instr"],
         yc_ids=yc, yv_ids=yv,
         kv_viol=kv["snake"], kv_comp=kv["camel"],   # 코드 구간 donor 추출용 prefill 캐시
+        kv_rand=kv_rand,                            # 무작위(길이일치·비동일) donor, 없으면 None
         n_diff=len(diff), n_layers=len(kv["snake"]),
         n_kv_heads=kv["snake"][0][0].shape[1],
     ), None
@@ -597,13 +645,17 @@ def run_a(args):
     decision = choose_decision_pair(pairs)
     a_pairs, _ = split_context_pairs(pairs, decision)
     companions = companion_pairs(pairs, decision, args.n_ctx)
-    print(f"[A] n_ctx={args.n_ctx} (주 pair + 동반 {len(companions)}개 함께 토글)")
+    print(f"[A] n_ctx={args.n_ctx} (주 pair + 동반 {len(companions)}개 함께 토글), "
+          f"pair_start={args.pair_start}")
+    base = args.pair_start
+    a_pairs = a_pairs[base:]
     if args.max_pairs:
         a_pairs = a_pairs[:args.max_pairs]
     done = load_done(args.out)
     seeds = list(range(args.seed_start, args.seed_start + args.n_seeds))
 
-    for pi, ctx in enumerate(a_pairs):
+    for local_i, ctx in enumerate(a_pairs):
+        pi = base + local_i
         for seed in seeds:
             key = ("A", "baseline", pi, seed, args.model)
             if key in done:
@@ -659,13 +711,18 @@ def _configs_b(args, n_layers, n_kv_heads, n_q_heads):
                      dict(pos="ctxname", donor="comp", groups=None, layers=[main])))
         cfgs.append((f"p1a_L{main}_func", "p1a",
                      dict(pos="ctxfunc", donor="comp", groups=None, layers=[main])))
-        # L25 규모 음성 대조(위치만 교체) — 전부 조건 간 동일 영역이라 Δ≈0 기대:
+        # L25 규모 음성 대조(위치만 교체) — 전부 조건 간 동일 영역이라 Δ≈0 기대(배관 검증):
         #   noop=자기이식(정확0)·instr=지침(비트동일)·boiler=코드 밖 보일러플레이트(동일).
         for pos_name, tag, donor in (("code", "noop", "self"),
                                      ("instr", "instr", "comp"),
                                      ("boiler", "boiler", "comp")):
             cfgs.append((f"ctl_{tag}_L{main}", "p1a",
                          dict(pos=pos_name, donor=donor, groups=None, layers=[main])))
+        # **무작위 donor 대조(주 인과 검정의 핵심)** — 같은 L25·같은 코드 위치·같은 토큰 수에
+        #   **비동일 clean K/V**(다른 pair들) 이식. "아무 clean activation이나 넣어도 회복되나"를
+        #   통제. 준수 donor(comp)가 이보다 유의하게 크면 → 회복이 준수-코드 내용에 특이적.
+        cfgs.append((f"ctl_randdonor_L{main}", "p1a",
+                     dict(pos="code", donor="rand", groups=None, layers=[main])))
         if args.sweep:
             # group별 국소화 — 후보 층에서 KV group 4개 단독.
             for li in [main] + aux:
@@ -694,11 +751,15 @@ def _configs_b(args, n_layers, n_kv_heads, n_q_heads):
 
 
 def _apply_config(torch, sess, kind, params):
-    """config에 맞춰 _IVX를 세팅. 반환: 개입에 쓸 prefix 캐시(위반본, 불변 재사용)."""
+    """config에 맞춰 _IVX를 세팅. 반환: 개입 적용할 시퀀스(위반 프롬프트).
+
+    donor: comp=준수 캐시 / self=위반 캐시(no-op) / rand=길이일치 비동일 clean 캐시.
+    """
     if kind == "p1a":
-        src = sess["kv_comp"] if params["donor"] == "comp" else sess["kv_viol"]
+        src = {"comp": sess["kv_comp"], "self": sess["kv_viol"],
+               "rand": sess.get("kv_rand")}[params["donor"]]
         positions = sess["pos"][params["pos"]]
-        donor = _slice_kv(src, positions)                    # 준수/위반 캐시의 해당 위치 열
+        donor = _slice_kv(src, positions)                    # 해당 위치 열 슬라이스
         iv_p1a(donor, positions, groups=params.get("groups"), layers=params.get("layers"))
     elif kind == "p2":
         iv_p2(sess["instr_pos"], params["lam"], heads=params.get("heads"),
@@ -714,16 +775,20 @@ def run_b(args):
     decision = choose_decision_pair(pairs)
     _, b_pairs = split_context_pairs(pairs, decision)
     companions = companion_pairs(pairs, decision, args.n_ctx)
-    print(f"[B] n_ctx={args.n_ctx} (주 pair + 동반 {len(companions)}개 함께 토글)")
+    print(f"[B] n_ctx={args.n_ctx} (주 pair + 동반 {len(companions)}개), "
+          f"pair_start={args.pair_start} (v2 파일럿 {PILOT_PAIRS}쌍 제외 확증은 --pair-start {PILOT_PAIRS})")
+    base = args.pair_start
+    b_pairs = b_pairs[base:]
     if args.max_pairs:
         b_pairs = b_pairs[:args.max_pairs]
     done = load_done(args.out)
     seeds = list(range(args.seed_start, args.seed_start + args.n_seeds))
 
-    for pi, ctx in enumerate(b_pairs):
+    for local_i, ctx in enumerate(b_pairs):
+        pi = base + local_i
         for seed in seeds:
             sess, why = prepare_session(model, tok, torch, ctx, decision, seed,
-                                        companions)
+                                        companions, pairs=pairs)
             if sess is None:
                 append_jsonl(args.out, _skip_rec("B", "prep", pi, seed, ctx,
                                                  decision, args.model, why))
@@ -733,6 +798,10 @@ def run_b(args):
             for ckey, kind, params in cfgs:
                 key = ("B", ckey, pi, seed, args.model)
                 if key in done:
+                    continue
+                if params.get("donor") == "rand" and sess.get("kv_rand") is None:
+                    append_jsonl(args.out, _skip_rec("B", ckey, pi, seed, ctx,
+                                                     decision, args.model, "no_rand_donor"))
                     continue
                 ids_iv = _apply_config(torch, sess, kind, params)
                 s_iv = pref_score(model, torch, ids_iv, sess["yc_ids"], sess["yv_ids"])
@@ -797,7 +866,7 @@ def run_validate(args):
     tried = []
     for cand in b_pairs[:12]:
         s, w = prepare_session(model, tok, torch, cand, decision, seed=0,
-                               companions=companions)
+                               companions=companions, pairs=pairs)
         tried.append((cand["camel"], w))
         if s is not None:
             sess, ctx = s, cand
@@ -1068,13 +1137,12 @@ def print_summary(out_path, n_boot=2000):
     null_layer_effects = [eff for li, eff in per_layer.items()
                           if li != main_layer and eff is not None]
 
-    # 깊이-제한 귀무: 단일 층 이식은 downstream 전파돼 초기 층이 자명히 full 회복을 만든다
-    # (파일럿에서 L0≈full 확인). 공정한 비교는 **전파 깊이가 비슷한 후기 층끼리** →
-    # 전 층 절반 이후(≥ n_layers//2) 층들의 효과 분포를 주 귀무로 쓴다.
+    # **사전 고정 후기 층 범위** = 모델 마지막 1/3(구조 기준, 결과 무관). L25 주변 임의 선택 금지.
     n_layers = (max(per_layer) + 1) if per_layer else 0
-    depth_th = n_layers // 2
-    null_late = [eff for li, eff in per_layer.items()
-                 if li != main_layer and li >= depth_th and eff is not None]
+    late_start = int(round(n_layers * LATE_FRAC_CUT))     # 예: 36*2/3 = 24 → L24..L35
+    late_others = sorted(li for li in per_layer
+                         if li >= late_start and li != main_layer)
+    null_late = [per_layer[li] for li in late_others if per_layer[li] is not None]
 
     def _tail_p(eff, null):
         if eff is None or not null:
@@ -1088,10 +1156,58 @@ def print_summary(out_path, n_boot=2000):
     def late_tail_p(eff):
         return _tail_p(eff, null_late)
 
-    # ── P1a 주 결과 ──
-    print("\n── P1a (코드 K/V 이식) ──   [후기귀무p = 전파-강건 주 판정 / 전층p = 참고]")
+    # per-(pair,seed) 셀별 config delta — 대응 대비(paired contrast) 검정용.
+    cell = defaultdict(dict)
+    for r in b:
+        cell[(r.get("ctx_camel"), r.get("seed"))][r["config_key"]] = r["delta"]
+    main_key = f"p1a_L{main_layer}_allG"
+    rand_key = f"ctl_randdonor_L{main_layer}"
+    late_keys = [f"p1a_L{li}_allG" for li in late_others]
+
+    def _contrast_rows(minus_keys, need_all=True):
+        """셀별 (Δ_main − minus의 평균)을 two-way boot용 rows로. minus 없으면 그 셀 제외."""
+        out = []
+        for (p, s), d in cell.items():
+            if main_key not in d:
+                continue
+            present = [d[k] for k in minus_keys if k in d]
+            if not present or (need_all and len(present) != len(minus_keys)):
+                continue
+            out.append({"ctx_camel": p, "seed": s,
+                        "c": d[main_key] - sum(present) / len(present)})
+        return out
+
+    # ── 주 검정 (사전 등록) — 대응 대비의 two-way bootstrap CI ──
+    print("\n══ 주 검정 (paired contrast, two-way boot 95%CI, 0 배제 여부) ══")
+    # (1) 인과·내용 특이성: L25 준수 donor vs 같은 L25 무작위(비동일 clean) donor.
+    caus_rows = _contrast_rows([rand_key])
+    if caus_rows:
+        cm, cb = _twoway_boot(caus_rows, "c", n_boot)
+        clo, chi = _ci(cb)
+        sig = "0 배제 ✅" if (clo is not None and clo > 0) else "0 포함 ❌"
+        print(f"① 인과·내용 특이성: Δ(L{main_layer} 준수) − Δ(L{main_layer} 무작위donor) "
+              f"= {cm:+.4f}  CI[{clo:+.4f},{chi:+.4f}]  → {sig}")
+    else:
+        print(f"① 인과·내용 특이성: 무작위 donor 대조 데이터 없음(ctl_randdonor_L{main_layer}) — 재실행 필요")
+    # (2) 층 특이성: L25 vs 사전 고정 후기 층 평균(L{late_start}..) 대응 대비.
+    spec_rows = _contrast_rows(late_keys)
+    if spec_rows and late_keys:
+        sm, sb = _twoway_boot(spec_rows, "c", n_boot)
+        slo, shi = _ci(sb)
+        sig = "0 배제 ✅" if (slo is not None and slo > 0) else "0 포함 ❌"
+        print(f"② 층 특이성: Δ(L{main_layer}) − mean(후기 층 L{late_start}+ 제외본, n={len(late_keys)}) "
+              f"= {sm:+.4f}  CI[{slo:+.4f},{shi:+.4f}]  → {sig}")
+    # (3) 회복 자체: L25 준수 이식 Δ가 0보다 큰가(부트 CI).
+    cl25, m25, lo25, hi25 = stat(main_key)
+    if m25 is not None:
+        sig = "0 배제 ✅" if (lo25 is not None and lo25 > 0) else "0 포함 ❌"
+        print(f"③ 회복(>0): Δ(L{main_layer} 준수 이식) = {m25:+.4f}  "
+              f"CI[{lo25:+.4f},{hi25:+.4f}]  → {sig}")
+
+    # ── P1a 층별 (기술/민감도) ──
+    print("\n── P1a 층별 (기술) ──   [후기순위p·전층순위p = 순위 근거(민감도), 검정 아님]")
     print(f"{'config':26s} {'평균Δ':>9s} {'95%CI':>20s} {'RecovR':>8s} "
-          f"{'후기귀무p':>9s} {'전층p':>7s}")
+          f"{'후기순위p':>9s} {'전층순위p':>9s}")
     p1a_keys = [f"p1a_L{main_layer}_allG", "p1a_full"] + \
                sorted(k for k in by_cfg if k.startswith("p1a_L") and k.endswith("_allG")
                       and k != f"p1a_L{main_layer}_allG")
@@ -1105,22 +1221,16 @@ def print_summary(out_path, n_boot=2000):
             li = int(ckey[len("p1a_L"):-len("_allG")])
         pf = layer_tail_p(per_layer.get(li)) if li is not None else None
         pl = (late_tail_p(per_layer.get(li))
-              if (li is not None and li >= depth_th) else None)
+              if (li is not None and li >= late_start) else None)
         star = ("  ← 주(L25)" if li == main_layer
                 else (" (상한)" if ckey == "p1a_full" else ""))
         ci = f"[{lo:+.4f},{hi:+.4f}]" if lo is not None else ""
         rr_s = f"{rr[0]:+.2f}" if rr[0] is not None else "-"
         pl_s = f"{pl:.4f}" if pl is not None else "  -  "
         pf_s = f"{pf:.4f}" if pf is not None else "-"
-        print(f"{ckey:26s} {m:+.4f} {ci:>20s} {rr_s:>8s} {pl_s:>9s} {pf_s:>7s}{star}")
-
-    p_late_main = late_tail_p(per_layer.get(main_layer))
-    p_full_main = layer_tail_p(per_layer.get(main_layer))
-    pl_str = f"{p_late_main:.4f}" if p_late_main is not None else "-"
-    pf_str = f"{p_full_main:.4f}" if p_full_main is not None else "-"
-    print(f"\n★ 주 판정(전파-강건): L{main_layer} vs 후기 층(≥L{depth_th}, "
-          f"n={len(null_late)}) 귀무 → p = {pl_str}")
-    print(f"  (참고) 전 층 귀무 p = {pf_str} — 초기 층 전파 오염으로 보수적, 주 판정 아님")
+        print(f"{ckey:26s} {m:+.4f} {ci:>20s} {rr_s:>8s} {pl_s:>9s} {pf_s:>9s}{star}")
+    print(f"  (민감도) 후기 순위 = 사전 고정 L{late_start}+ 중 L{main_layer} 순위, "
+          f"전층 순위 = 전 층 중(초기 층 전파 오염). 순위 p 바닥 = 1/(n+1)이라 검정 아님.")
 
     # ── 단계적 범위(보조) — 이름 토큰 vs 전파 표현 구분 ──
     print("\n── L25 단계적 범위 (name ⊂ func ⊂ code) ──")
@@ -1153,13 +1263,13 @@ def print_summary(out_path, n_boot=2000):
         print(f"  단조 추세(Spearman ρ, λ vs Δ) = "
               f"{rho:+.3f}" if rho is not None else "  추세: -")
 
-    print("\n※ 주 판정: L{}_allG 효과가 **후기 층 귀무분포**의 상위 꼬리인가(전파-강건)."
-          .format(main_layer))
-    print("  단일 층 이식은 downstream 전파돼 초기 층이 자명히 full 회복 → 전 층 귀무는 오염됨.")
-    print("※ 보강 인과 근거: 대조=0(특이성) + 단계 범위 name⊂func⊂code(용량-반응).")
+    print("\n※ 주 판정(사전 등록) = 위 ①②③ 대응 대비 CI가 0을 배제하는가:")
+    print("   ① 인과·내용 특이성(L25 준수 vs 무작위 donor)  ② 층 특이성(L25 vs 후기평균)  ③ 회복>0.")
+    print("   순위 p(후기·전층)는 바닥 1/(n+1)이라 검정 아님 — 민감도·기술 근거로만.")
+    print("※ 보강: 단계 범위 name⊂func⊂code(용량-반응) + P2 λ 단조.")
     print("※ 건전성: ctl_noop=0(정확)·ctl_instr·ctl_boiler≈0(조건 간 동일 영역).")
-    print("※ CI는 two-way(이름쌍×seed) cluster bootstrap. "
-          "RecoveryRatio=config 효과 ÷ A분할 gap(분자·분모 독립 부트).")
+    print("※ 파일럿(v2)은 확증서에서 제외 — 이 표는 v3(--pair-start {} 홀드아웃).".format(PILOT_PAIRS))
+    print("※ CI는 two-way(이름쌍×seed) cluster bootstrap.")
 
 
 def _main_from(rows):
@@ -1199,7 +1309,9 @@ def main():
                     help="함께 토글할 context 함수 수(주 pair + 동반). 위반=전부 snake. "
                          "1이면 조작 약함(gap≈0). exp1처럼 다수(≈8) 권장")
     ap.add_argument("--max-pairs", type=int, default=0,
-                    help="파일럿용 — context pair 수 제한(0=전체 50)")
+                    help="파일럿용 — context pair 수 제한(0=전체)")
+    ap.add_argument("--pair-start", type=int, default=0,
+                    help=f"확증은 파일럿 제외 → --pair-start {PILOT_PAIRS} (v2 파일럿 {PILOT_PAIRS}쌍 뒤부터)")
     ap.add_argument("--main-layer", type=int, default=MAIN_LAYER,
                     help="주 개입 층(2단계 재현 L25)")
     ap.add_argument("--aux-layers", type=str, default=",".join(map(str, AUX_LAYERS)),
