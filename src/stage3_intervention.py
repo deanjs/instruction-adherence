@@ -1117,12 +1117,16 @@ def print_summary(out_path, n_boot=2000):
               f"(완전 회복 목표=분모)  [two-way boot: 이름쌍×seed]")
 
     from collections import defaultdict
-    by_cfg = defaultdict(list)
+    by_cfg = {}
     for r in b:
-        by_cfg[r["config_key"]].append(r)
+        by_cfg.setdefault(r["config_key"], []).append(r)
+
+    if not by_cfg:
+        print("\n(B 개입 레코드 없음 — `--run-b`로 개입을 먼저 실행하세요.)")
+        return
 
     def stat(ckey):
-        m, boot = _twoway_boot(by_cfg[ckey], "delta", n_boot)
+        m, boot = _twoway_boot(by_cfg.get(ckey, []), "delta", n_boot)
         lo, hi = _ci(boot)
         return boot, m, lo, hi
 
