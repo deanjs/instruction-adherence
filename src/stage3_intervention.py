@@ -372,7 +372,7 @@ def rand_donor_funcs(pairs, funcs, seed_key):
     return alt
 
 
-def build_prompt(tokenizer, ctx_pair, ctx_style, seed, companions):
+def build_prompt(tokenizer, ctx_pair, ctx_style, seed, companions, decision_spec=None):
     """주 context pair + 동반 pair들을 ctx_style(camel=준수/snake=위반)로 **함께 토글**.
 
     반환: dict(prompt_text, input_ids, prompt_len, code_pos, ctxfunc_pos, ctxname_pos, instr_pos).
@@ -380,7 +380,11 @@ def build_prompt(tokenizer, ctx_pair, ctx_style, seed, companions):
       ctxfunc/ctxname = **주 context pair** 함수/이름 span(단계적 범위·전파 대조 기준점).
     프롬프트는 "```python\\ndef"로 프라이밍(끝 공백 없음) → 다음 토큰이 새 함수의 결정 지점.
     후보 이름은 선행 공백으로 붙인다(BPE 경계 고정, `decision_strings`).
+    decision_spec: 결정 작업 지시(None이면 고정 DECISION_SPEC). 행동 실험에서 1단계 애매 작업을
+      넣어 비포화 조건을 만들 때 사용 — 결정 작업 텍스트는 code 블록 **밖**이라 camel/snake 토큰
+      정렬(code_pos)에 영향 없음(양쪽 동일 텍스트).
     """
+    spec = decision_spec if decision_spec is not None else DECISION_SPEC
     funcs = [ctx_pair] + list(companions)               # [0]=주 pair
     bodies = ["def {n}(value):\n    return _process(value)".format(n=f[ctx_style])
               for f in funcs]
@@ -394,7 +398,7 @@ def build_prompt(tokenizer, ctx_pair, ctx_style, seed, companions):
         {"role": "system", "content": system_prompt()},
         {"role": "user", "content": ("Here is the existing code in this project:\n\n"
                                      f"```python\n{prefix}\n```\n\n"
-                                     f"Now add a function that {DECISION_SPEC}.")},
+                                     f"Now add a function that {spec}.")},
     ]
     prompt_text = tokenizer.apply_chat_template(
         messages, tokenize=False, add_generation_prompt=True)
@@ -482,14 +486,17 @@ def pref_score(model, torch, ids, yc_ids, yv_ids):
 # ─────────────────────────────────────────────────────────────
 
 def prepare_session(model, tokenizer, torch, ctx_pair, decision, seed, companions,
-                    pairs=None):
+                    pairs=None, decision_spec=None, require_candidates=True):
     """위반/준수 두 조건의 prefix 캐시를 만들고 정렬을 검증한다.
 
     주 pair + 동반 pair들을 함께 토글(준수=전부 camel / 위반=전부 snake).
     pairs가 주어지면 무작위 donor(같은 length 다른 pair들의 clean K/V)도 만든다.
+    decision_spec: 결정 작업 지시 교체(행동 실험의 1단계 애매 작업 이식용).
+    require_candidates: 고정 후보 쌍(yc/yv) 정렬 검증 여부. 선호 채점(v3)엔 True 필수,
+      **자유 생성 행동 실험엔 False**(후보 없이 생성만 판정 — 애매 작업이라 고정 후보와 무관).
     반환: dict 또는 (None, 사유).
     """
-    P = {s: build_prompt(tokenizer, ctx_pair, s, seed, companions)
+    P = {s: build_prompt(tokenizer, ctx_pair, s, seed, companions, decision_spec=decision_spec)
          for s in ("camel", "snake")}
     a, b = P["camel"], P["snake"]
 
@@ -503,20 +510,25 @@ def prepare_session(model, tokenizer, torch, ctx_pair, decision, seed, companion
     if a["code_pos"] != b["code_pos"] or a["instr_pos"] != b["instr_pos"]:
         return None, "seg_mismatch"
 
-    # 결정 지점 후보(규칙 2: 조건 공통 고정 문자열).
+    # 결정 지점 후보(규칙 2: 조건 공통 고정 문자열). 선호 채점에만 필요.
     # 두 context 프롬프트는 context 함수명(camel/snake) 때문에 서로 다르다 — 그게 조건이다.
     # 하지만 후보는 "```python\ndef " 프라이밍 **뒤**에 붙는 동일 문자열이라, 두 조건에서
     # 같은 토큰열이어야 한다. 양쪽에서 뽑아 일치를 검증(어긋나면 폐기).
-    dc, dv = decision_strings(decision)
-    yc_a = candidate_ids(tokenizer, a["prompt_text"], dc)
-    yv_a = candidate_ids(tokenizer, a["prompt_text"], dv)
-    yc_b = candidate_ids(tokenizer, b["prompt_text"], dc)
-    yv_b = candidate_ids(tokenizer, b["prompt_text"], dv)
-    if None in (yc_a, yv_a, yc_b, yv_b):
-        return None, "cand_boundary_merge"
-    if yc_a != yc_b or yv_a != yv_b:
-        return None, "cand_context_dependent"     # 후보 토큰이 조건에 의존 → 채점 부적격
-    yc, yv = yc_a, yv_a
+    # require_candidates=False(자유 생성 행동 실험)면 이 검증을 생략한다 — 애매 작업이라
+    # 고정 후보(formatValue)와 작업 의미가 안 맞고, 생성 이름을 case로 판정만 하면 되기 때문.
+    if require_candidates:
+        dc, dv = decision_strings(decision)
+        yc_a = candidate_ids(tokenizer, a["prompt_text"], dc)
+        yv_a = candidate_ids(tokenizer, a["prompt_text"], dv)
+        yc_b = candidate_ids(tokenizer, b["prompt_text"], dc)
+        yv_b = candidate_ids(tokenizer, b["prompt_text"], dv)
+        if None in (yc_a, yv_a, yc_b, yv_b):
+            return None, "cand_boundary_merge"
+        if yc_a != yc_b or yv_a != yv_b:
+            return None, "cand_context_dependent"     # 후보 토큰이 조건에 의존 → 채점 부적격
+        yc, yv = yc_a, yv_a
+    else:
+        yc, yv = None, None
 
     # trigger("def " 마지막 토큰)도 두 조건에서 같아야 한다(공통 프라이밍).
     if a["input_ids"][-1] != b["input_ids"][-1]:
@@ -569,7 +581,7 @@ def prepare_session(model, tokenizer, torch, ctx_pair, decision, seed, companion
         alt = rand_donor_funcs(pairs, funcs, seed_key=f"{ctx_pair['camel']}|{seed}")
         if alt is not None:
             for style, slot in (("camel", "camel"), ("snake", "snake")):
-                Pr = build_prompt(tokenizer, alt[0], style, seed, alt[1:])
+                Pr = build_prompt(tokenizer, alt[0], style, seed, alt[1:], decision_spec=decision_spec)
                 if (len(Pr["input_ids"]) == len(a["input_ids"])
                         and clip(Pr["code_pos"]) == code_pos):
                     inp = torch.tensor([Pr["input_ids"][:-1]], dtype=torch.long,

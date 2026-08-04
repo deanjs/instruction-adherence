@@ -37,7 +37,7 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from step1_baseline import classify_case, extract_name          # noqa: E402
+from step1_baseline import classify_case, extract_name, FUNCTION_SPECS  # noqa: E402
 from stage3_intervention import (                                # noqa: E402
     RESULTS_DIR, RUN_MODEL, VALIDATE_MODEL, MAIN_LAYER, AUX_LAYERS, PILOT_PAIRS,
     SINK, _char_span_to_tokens, _load_model, _load_pairs, choose_decision_pair,
@@ -208,8 +208,11 @@ def _prep(args):
     companions = companion_pairs(pairs, decision, args.n_ctx)
     print(f"[behavior v2] run_tag={_run_tag(args)}  pair_start={args.pair_start}  "
           f"(홀드아웃은 --pair-start {PILOT_PAIRS})")
-    if args.prompt_variant != "decision":
-        print(f"[경고] prompt_variant={args.prompt_variant} 아직 미구현 — 현재는 'decision' 하네스만 실행됨.")
+    if args.prompt_variant == "stage1":
+        print("[stage1] 결정 작업을 1단계 애매 작업(FUNCTION_SPECS)으로 교체 — 비포화 목적. "
+              "토큰 일치 prefix·개입은 그대로(donor는 prefix에서). 고정 후보 검증 생략.")
+    elif args.prompt_variant != "decision":
+        print(f"[경고] prompt_variant={args.prompt_variant} 미구현 — 'decision'/'stage1'만 지원.")
     b_pairs = b_pairs[args.pair_start:]
     if args.max_pairs:
         b_pairs = b_pairs[:args.max_pairs]
@@ -218,6 +221,16 @@ def _prep(args):
 
 def _draw_seed(pi, seed):
     return 100003 * (pi + 1) + 97 * (seed + 1)
+
+
+def _decision_for(args, pi, seed):
+    """prompt_variant → (decision_spec, require_candidates, spec_id).
+    'stage1'은 1단계 애매 작업(FUNCTION_SPECS)을 세션마다 회전(비포화 목적). 자유 생성이라
+    고정 후보 불필요(require_candidates=False). 'decision'은 기존 고정 작업(formatValue)."""
+    if args.prompt_variant == "stage1":
+        spec = FUNCTION_SPECS[(pi + seed) % len(FUNCTION_SPECS)]
+        return spec["desc"], False, spec["id"]
+    return None, True, "decision"
 
 
 # ─────────────────────────────────────────────────────────────
@@ -234,8 +247,10 @@ def _run_gen_like(args, mode, conds):
     for li, ctx in enumerate(b_pairs):
         pi = args.pair_start + li
         for seed in seeds:
+            dspec, reqc, spec_id = _decision_for(args, pi, seed)
             sess, why = prepare_session(model, tok, torch, ctx, decision, seed,
-                                        companions, pairs=pairs)
+                                        companions, pairs=pairs,
+                                        decision_spec=dspec, require_candidates=reqc)
             if sess is None:
                 append_jsonl(args.out, _skip(mode, "prep", pi, seed, ctx, args.model, why, run_tag))
                 continue
@@ -259,7 +274,7 @@ def _run_gen_like(args, mode, conds):
                     "run_tag": run_tag, "gate_tag": gate_tag,
                     "n_ctx": args.n_ctx, "sample": args.sample,
                     "temperature": args.temperature, "top_p": args.top_p,
-                    "prompt_variant": args.prompt_variant,
+                    "prompt_variant": args.prompt_variant, "spec_id": spec_id,
                     "ctx_camel": ctx["camel"], "ctx_snake": ctx["snake"],
                     "n_draws": cc["n_draws"], "n_camel": cc["camel"], "n_snake": cc["snake"],
                     "n_pascal": cc["pascal"], "n_other": cc["other"], "n_name_fail": cc["name_fail"],
@@ -392,8 +407,10 @@ def run_gen_chain(args):
     for li, ctx in enumerate(b_pairs):
         pi = args.pair_start + li
         for seed in seeds:
+            dspec, reqc, spec_id = _decision_for(args, pi, seed)
             sess, why = prepare_session(model, tok, torch, ctx, decision, seed,
-                                        companions, pairs=pairs)
+                                        companions, pairs=pairs,
+                                        decision_spec=dspec, require_candidates=reqc)
             if sess is None:
                 append_jsonl(args.out, _skip("chain", "prep", pi, seed, ctx, args.model, why, run_tag))
                 continue
@@ -414,7 +431,8 @@ def run_gen_chain(args):
                 append_jsonl(args.out, {
                     "design_version": DESIGN_VERSION, "model": args.model,
                     "mode": "chain", "config": label, "pair_idx": pi, "seed": seed,
-                    "run_tag": run_tag, "n_ctx": args.n_ctx, "prompt_variant": args.prompt_variant,
+                    "run_tag": run_tag, "n_ctx": args.n_ctx,
+                    "prompt_variant": args.prompt_variant, "spec_id": spec_id,
                     "ctx_camel": ctx["camel"], "ctx_snake": ctx["snake"],
                     "n_steps": len(steps), "violation_count": nviol,
                     "strict_noncompliant_count": nstrict, "name_fail_count": nfail,
@@ -591,8 +609,9 @@ def main():
     ap.add_argument("--aux-layers", type=str, default=",".join(map(str, AUX_LAYERS)))
     ap.add_argument("--gen-max-new", type=int, default=GEN_MAX_NEW)
     ap.add_argument("--chain-n", type=int, default=CHAIN_N)
-    ap.add_argument("--prompt-variant", default="decision",
-                    help="'decision'(현재 하네스)만 구현. 'stage1'(12-prefix·교차작업)은 예정.")
+    ap.add_argument("--prompt-variant", default="decision", choices=["decision", "stage1"],
+                    help="decision=고정 작업(formatValue). stage1=1단계 애매 작업 이식(비포화 목적, "
+                         "결정 작업만 교체·토큰일치 prefix/개입 그대로). 천장이면 stage1로.")
     # 표집
     ap.add_argument("--sample", action="store_true", help="표집 생성(그리디 천장 대응)")
     ap.add_argument("--temperature", type=float, default=SAMPLE_TEMP)

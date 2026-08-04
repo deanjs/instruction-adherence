@@ -413,7 +413,10 @@ P1a `index_copy_`에서 배치 오류) — 같은 draw seed를 전 조건이 공
 실행 설정**(n_ctx·표집·temp·top_p·draw수·prompt_variant) 포함 → 설정 다른 실행을 완료로 오인·혼합 집계
 방지. ⓒ `--generate`는 **게이트 PASS 기록이 있어야 실행**(미통과 자동 중단; `--force-ungated` 강제).
 ⓓ 이름추출 실패 지표는 `name_fail`(AST 유효성 아님 — 결정 지점이 함수명이라 identifier 추출 실패만 셈).
-ⓔ `prompt_variant='stage1'`(12-prefix·교차작업 이식)은 **예정** — 현재는 'decision' 하네스에 표집·n_ctx만.
+ⓔ `prompt_variant='stage1'`(**구현됨**): 결정 작업을 1단계 애매 작업(FUNCTION_SPECS, 세션마다 회전)으로
+교체 — 토큰 일치 prefix·개입·donor는 그대로(donor는 prefix에서 나오므로 결정 작업과 무관), 자유 생성이라
+고정 후보 검증만 생략. **decision(formatValue)이 표집으로도 천장(0/600 snake)이라, 비포화는 결정 작업
+자체를 바꿔야 함을 확인**(1단계는 greedy로도 30% — lever는 표집이 아니라 작업 애매성).
 
 **(1) 홀드아웃 개입 `--generate --sample`.** 작동점 확정 후에만(게이트 PASS 미기록이면 자동 중단),
 **v2 보정(dev 10쌍)과 분리된 B쌍(`--pair-start 10`)**으로. 단 B쌍은 **v3 고정후보·v1 greedy에서
