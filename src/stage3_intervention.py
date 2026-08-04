@@ -417,7 +417,8 @@ def build_prompt(tokenizer, ctx_pair, ctx_style, seed, companions):
 
     return dict(prompt_text=prompt_text, input_ids=input_ids, prompt_len=len(input_ids),
                 code_pos=code_pos, ctxfunc_pos=ctxfunc_pos, ctxname_pos=ctxname_pos,
-                instr_pos=instr_pos)
+                instr_pos=instr_pos,
+                prefix=prefix, messages=messages)   # 행동(연쇄) 실험용 — 코드 문자열·기본 chat
 
 
 def decision_strings(decision):
@@ -583,6 +584,8 @@ def prepare_session(model, tokenizer, torch, ctx_pair, decision, seed, companion
         ctx_pair=ctx_pair, seed=seed, n_ctx=len(companions) + 1,
         prefix_len=prefix_len,
         ids_viol=b["input_ids"], ids_comp=a["input_ids"],   # 전체 프롬프트("def"까지) — full forward 채점용
+        messages_viol=b["messages"], messages_comp=a["messages"],  # 행동 연쇄용 chat
+        prefix_viol=b["prefix"], prefix_comp=a["prefix"],   # 코드 블록 문자열(연쇄 정렬 재확인용)
         pos=pos, instr_pos=pos["instr"],
         yc_ids=yc, yv_ids=yv,
         kv_viol=kv["snake"], kv_comp=kv["camel"],   # 코드 구간 donor 추출용 prefill 캐시
