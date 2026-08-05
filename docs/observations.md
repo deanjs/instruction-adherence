@@ -5,11 +5,10 @@
 
 | 단계 / 실험 | 관찰 기록 위치 |
 |---|---|
-| 예비실험 (Step 0/1, exp1 파일럿) | [`experiments/00_예비실험.md`](experiments/00_예비실험.md#관찰-기록-예비실험) |
 | 1단계 · 01 행동실험 | [`experiments/01_행동실험.md`](experiments/01_행동실험.md#관찰-기록-실험-1) |
-| 2단계 · attention 관측 | [`experiments/02_attention관측.md`](experiments/02_attention관측.md#관찰-기록-2단계) |
+| 2단계 · attention 관측 | [`experiments/02_attention관측.md`](experiments/02_attention관측.md#관찰-기록-2단계--날짜별-진행-트레일-사전-등록-기록) |
 | 3단계 · attention 개입 | [`experiments/03_attention개입.md`](experiments/03_attention개입.md#관찰-기록-3단계) |
-| (보류) 추가 실험 A·B | [`experiments/추가실험.md`](experiments/추가실험.md#관찰-기록-추가-실험-a) |
+| (보관) 예비실험 · 추가 실험 A·B · 행동 v1/v2 | [`experiments/archive_보류·실패.md`](experiments/archive_보류·실패.md) |
 
 전체 로드맵은 [`experiments/README.md`](experiments/README.md).
 
@@ -21,4 +20,19 @@
 이 프로젝트 진행 중 그런 현상(세션 후반에 프로젝트 규칙이 무시되는 것)이 관찰되면
 그 자체가 기록할 가치가 있으므로 아래에 날짜와 함께 남긴다.
 
-*(아직 없음)*
+### 2026-08-05 — 가설 라벨 드리프트: 개입 결과가 "주 가설 H3"로 잘못 표기돼 있었다 (규칙 6 위반 관찰)
+
+CLAUDE.md 규칙 6은 **"주 가설은 H1a·H2a·H3 뿐, 사후에 주 가설을 추가하지 않는다"**고 못박는다.
+그런데 세션이 길어지며 작성된 문서들(`experiments/README.md`, `03_attention개입.md`,
+`src/stage2_attention.py`·`src/stage3_intervention.py`, CLAUDE.md 진행 상황)이 **3단계 attention 개입
+결과를 "주 가설 H3 확증"으로 표기**하고 있었다.
+
+- **실제 계획서(`연구계획서.md` 4장):** H3 = **규칙 등급 비대칭(금지형>수행형)**, H2 하네스 내부에서만
+  검정(미실행 — 현재 `archive_보류·실패.md` C절). 개입 가설은 **H7(P1a)·H8(P2)** 로 별도.
+- 즉 개입이 확증한 건 H7·H8인데, 위계상 주 가설이 아닌 것이 **사후에 "주 가설 H3"로 승격**돼 있었다 —
+  규칙 6이 금지한 바로 그 사후 주 가설 교체.
+- **이 프로젝트의 아이러니의 실제 사례.** 규칙을 지키자고 만든 연구에서, 세션 후반 문서가 그 규칙을 어겼다.
+
+**조치(2026-08-05 문서 재편):** 3단계 문서·README·색인에서 개입 라벨을 **H7·H8로 정정**하고,
+계획서 H3(비대칭)는 미실행으로 명시했다. `src/*.py`와 CLAUDE.md 진행 상황의 "H3" 표기는 **아직 남아
+있어 후속 정정 필요**(코드 주석 = 논문 산출물 아님이라 우선순위는 낮되, 일관성 위해 정리 대상).
